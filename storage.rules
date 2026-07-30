@@ -1,0 +1,46 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function role() {
+      return signedIn() && request.auth.token.role is string ? request.auth.token.role : "customer";
+    }
+
+    function isStaff() {
+      return role() in ["owner", "manager", "counter", "inventory", "accountant"];
+    }
+
+    function isImage() {
+      return request.resource.contentType.matches("image/.*");
+    }
+
+    function under(limitMb) {
+      return request.resource.size < limitMb * 1024 * 1024;
+    }
+
+    match /dressImages/{itemId}/{fileName} {
+      allow read: if true;
+      allow write: if signedIn() && role() in ["owner", "manager", "inventory"] && isImage() && under(8);
+    }
+
+    match /customerDocuments/{customerId}/{fileName} {
+      allow read, write: if signedIn() && role() in ["owner", "manager", "counter"] && isImage() && under(5);
+    }
+
+    match /conditionPhotos/{bookingId}/{fileName} {
+      allow read, write: if signedIn() && isStaff() && isImage() && under(8);
+    }
+
+    match /paymentEvidence/{bookingId}/{fileName} {
+      allow read, write: if signedIn() && isStaff() && isImage() && under(5);
+    }
+
+    match /expenseReceipts/{expenseId}/{fileName} {
+      allow read, write: if signedIn() && role() in ["owner", "manager", "accountant"] && isImage() && under(5);
+    }
+  }
+}

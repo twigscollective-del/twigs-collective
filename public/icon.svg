@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">TC app icon</title>
+  <rect width="512" height="512" rx="96" fill="#123b2a"/>
+  <circle cx="256" cy="256" r="178" fill="#fbf7ed" opacity=".96"/>
+  <path d="M145 328c42-101 181-101 223 0" fill="none" stroke="#b98b4b" stroke-width="24" stroke-linecap="round"/>
+  <text x="256" y="266" text-anchor="middle" font-family="Georgia, serif" font-size="132" font-weight="700" fill="#123b2a">TC</text>
+</svg>

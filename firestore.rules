@@ -1,0 +1,167 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function role() {
+      return signedIn() && request.auth.token.role is string ? request.auth.token.role : "customer";
+    }
+
+    function isStaff() {
+      return role() in ["owner", "manager", "counter", "inventory", "accountant"];
+    }
+
+    function isOwner() {
+      return role() == "owner";
+    }
+
+    function isManagerOrOwner() {
+      return role() in ["owner", "manager"];
+    }
+
+    function canWriteInventory() {
+      return role() in ["owner", "manager", "inventory"];
+    }
+
+    function canWriteCustomers() {
+      return role() in ["owner", "manager", "counter"];
+    }
+
+    function canWriteBookings() {
+      return role() in ["owner", "manager", "counter"];
+    }
+
+    function canWritePayments() {
+      return role() in ["owner", "manager", "counter"];
+    }
+
+    function canVerifyPayments() {
+      return role() in ["owner", "manager", "accountant"];
+    }
+
+    function isPublicDress() {
+      return resource.data.publicVisible == true && resource.data.archived != true;
+    }
+
+    function validMoney(value) {
+      return value is number && value >= 0;
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn() && (request.auth.uid == userId || isManagerOrOwner());
+      allow create: if signedIn() && request.auth.uid == userId && !("role" in request.resource.data);
+      allow update: if signedIn()
+        && (
+          request.auth.uid == userId && !request.resource.data.diff(resource.data).affectedKeys().hasAny(["role", "active", "permissions"])
+          || isOwner()
+        );
+      allow delete: if isOwner();
+    }
+
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if isManagerOrOwner();
+    }
+
+    match /dressDesigns/{designId} {
+      allow read: if resource.data.publicVisible == true || isStaff();
+      allow create, update: if canWriteInventory();
+      allow delete: if false;
+    }
+
+    match /inventoryItems/{itemId} {
+      allow read: if isPublicDress() || isStaff();
+      allow create: if canWriteInventory()
+        && request.resource.data.dressId is string
+        && request.resource.data.currentStatus in [
+          "Available", "Pending Reservation", "Reserved", "Ready for Pickup", "Rented", "Overdue",
+          "Returned - Inspection Pending", "Cleaning", "Repair", "Damaged", "Lost", "Retired"
+        ]
+        && validMoney(request.resource.data.rentalPrice)
+        && validMoney(request.resource.data.securityDeposit);
+      allow update: if canWriteInventory()
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(["createdAt", "createdBy"]);
+      allow delete: if false;
+    }
+
+    match /customers/{customerId} {
+      allow read: if isStaff() || (signedIn() && request.auth.uid == resource.data.authUid);
+      allow create, update: if canWriteCustomers();
+      allow delete: if false;
+    }
+
+    match /bookings/{bookingId} {
+      allow read: if isStaff() || (signedIn() && request.auth.uid == resource.data.customerAuthUid);
+      allow create: if canWriteBookings()
+        || (
+          signedIn()
+          && request.resource.data.customerAuthUid == request.auth.uid
+          && request.resource.data.bookingStatus == "Pending Approval"
+        );
+      allow update: if canWriteBookings();
+      allow delete: if false;
+    }
+
+    match /bookingItems/{bookingItemId} {
+      allow read: if isStaff();
+      allow create, update: if canWriteBookings();
+      allow delete: if false;
+    }
+
+    match /payments/{paymentId} {
+      allow read: if isStaff();
+      allow create: if canWritePayments()
+        && request.resource.data.amount is number
+        && request.resource.data.amount > 0
+        && request.resource.data.verificationStatus == "Pending Verification";
+      allow update: if canVerifyPayments()
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(["transactionId", "receiptNumber", "amount", "upiReference"]);
+      allow delete: if false;
+    }
+
+    match /refunds/{refundId} {
+      allow read: if isStaff();
+      allow create: if canWritePayments();
+      allow update: if isManagerOrOwner();
+      allow delete: if false;
+    }
+
+    match /expenses/{expenseId} {
+      allow read: if role() in ["owner", "manager", "accountant"];
+      allow create, update: if role() in ["owner", "manager"];
+      allow delete: if isOwner();
+    }
+
+    match /cleaningRecords/{recordId} {
+      allow read: if isStaff();
+      allow create, update: if role() in ["owner", "manager", "inventory"];
+      allow delete: if false;
+    }
+
+    match /repairRecords/{recordId} {
+      allow read: if isStaff();
+      allow create, update: if role() in ["owner", "manager", "inventory"];
+      allow delete: if false;
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isStaff() || (signedIn() && request.auth.uid == resource.data.userId);
+      allow create, update: if isStaff();
+      allow delete: if isManagerOrOwner();
+    }
+
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isOwner();
+    }
+
+    match /auditLogs/{logId} {
+      allow read: if role() in ["owner", "manager", "accountant"];
+      allow create: if isStaff();
+      allow update, delete: if false;
+    }
+  }
+}
