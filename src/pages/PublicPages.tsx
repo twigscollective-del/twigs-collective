@@ -441,7 +441,7 @@ export function ContactPage() {
 }
 
 export function LoginPage() {
-  const { configured, login, resetPassword, user } = useAuth();
+  const { configured, login, resetPassword } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname || "/dashboard";
@@ -490,19 +490,9 @@ export function LoginPage() {
     <section className="mx-auto grid max-w-5xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-2 lg:px-8">
       <div>
         <SectionHeader eyebrow="Secure access" title="Staff and customer login" description="Firebase Authentication supports email/password login, password reset, persistent sessions, secure logout, protected routes, deactivation, and role claims." />
-        <div className={`mt-6 rounded-lg border p-4 text-sm font-semibold ${configured ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}>
-          {configured
-            ? "Firebase is configured. Use an Email/Password account created in Firebase Authentication."
-            : "Firebase is not configured yet. Add Firebase values in .env.local and restart the dev server."}
-        </div>
       </div>
       <form onSubmit={submit} className="rounded-lg border border-forest/10 bg-white p-6 shadow-soft">
         <div className="grid gap-4">
-          {user && (
-            <div className="rounded-md bg-emerald-50 p-3 text-sm font-semibold text-emerald-900">
-              Signed in as {user.email}. You can open the dashboard.
-            </div>
-          )}
           <TextField label="Email" type="email" value={email} onChange={setEmail} placeholder="owner@twigsrental.com" required />
           <TextField label="Password" type="password" value={password} onChange={setPassword} placeholder="Use Firebase Auth" required />
           {error && <p className="rounded-md bg-red-50 p-3 text-sm font-semibold text-red-800">{error}</p>}
