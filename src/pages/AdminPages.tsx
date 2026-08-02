@@ -408,7 +408,7 @@ export function InventoryPage() {
         featuredImage: nextFeaturedImage,
         shortVideo: nextShortVideo,
         publicVisible: true,
-        featured: false,
+        featured: true,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }));

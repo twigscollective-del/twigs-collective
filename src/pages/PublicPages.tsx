@@ -46,8 +46,10 @@ function usePublicInventoryItems() {
 
 export function HomePage() {
   const syncedItems = usePublicInventoryItems();
-  const featuredPool = syncedItems.filter((item) => item.featured && item.publicVisible);
-  const featured = (featuredPool.length ? featuredPool : syncedItems.filter((item) => item.publicVisible)).slice(0, 3);
+  const featured = syncedItems
+    .filter((item) => item.publicVisible && !item.archived)
+    .sort((first, second) => new Date(second.updatedAt || second.createdAt).getTime() - new Date(first.updatedAt || first.createdAt).getTime())
+    .slice(0, 3);
 
   return (
     <>
