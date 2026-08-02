@@ -40,14 +40,15 @@ import {
   addPaymentTransaction,
   addRefundRecord,
   addRepairRecord,
+  listBookings,
   listInventoryItems,
   listCustomers,
+  listPayments,
+  listRefunds,
+  saveBooking,
   saveInventoryItem,
   saveCustomer,
   saveShopSettings,
-  updateBookingDepositSettlement,
-  updateBookingPaymentSummary,
-  updateBookingReturnInspection,
   updateCleaningRecordStatus,
   updateExpenseApproval,
   updateInventoryStatus,
@@ -151,6 +152,66 @@ function useSyncedCustomers() {
       })
       .catch((error: unknown) => {
         console.warn("Customer sync failed", error);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return [rows, setRows] as const;
+}
+
+function useSyncedBookings() {
+  const [rows, setRows] = useState(bookings);
+
+  useEffect(() => {
+    let active = true;
+    listBookings(bookings)
+      .then((bookingRows) => {
+        if (active && bookingRows.length) setRows(bookingRows);
+      })
+      .catch((error: unknown) => {
+        console.warn("Booking sync failed", error);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return [rows, setRows] as const;
+}
+
+function useSyncedPayments() {
+  const [rows, setRows] = useState(payments);
+
+  useEffect(() => {
+    let active = true;
+    listPayments(payments)
+      .then((paymentRows) => {
+        if (active && paymentRows.length) setRows(paymentRows);
+      })
+      .catch((error: unknown) => {
+        console.warn("Payment sync failed", error);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return [rows, setRows] as const;
+}
+
+function useSyncedRefunds() {
+  const [rows, setRows] = useState(refunds);
+
+  useEffect(() => {
+    let active = true;
+    listRefunds(refunds)
+      .then((refundRows) => {
+        if (active && refundRows.length) setRows(refundRows);
+      })
+      .catch((error: unknown) => {
+        console.warn("Refund sync failed", error);
       });
     return () => {
       active = false;
@@ -1315,7 +1376,7 @@ export function CustomersPage() {
 }
 
 export function BookingsPage() {
-  const [bookingRows, setBookingRows] = useState(bookings);
+  const [bookingRows, setBookingRows] = useSyncedBookings();
   const syncedItems = useSyncedInventoryItems();
   const [customerRows] = useSyncedCustomers();
   const [selectedCustomerId, setSelectedCustomerId] = useState(customers[0].id);
@@ -1346,7 +1407,7 @@ export function BookingsPage() {
     }
   }, [selectedItemId, syncedItems]);
 
-  function createBooking(event: FormEvent) {
+  async function createBooking(event: FormEvent) {
     event.preventDefault();
     setBookingMessage("");
     setBookingError("");
@@ -1403,12 +1464,17 @@ export function BookingsPage() {
       updatedAt: createdAt
     };
 
-    setBookingRows([nextBooking, ...bookingRows]);
-    setBookingMessage(`${nextBooking.bookingNumber} created as Pending Approval.`);
-    setNotes("");
+    try {
+      if (firebaseConfigured) await saveBooking(nextBooking);
+      setBookingRows([nextBooking, ...bookingRows]);
+      setBookingMessage(`${nextBooking.bookingNumber} created as Pending Approval.`);
+      setNotes("");
+    } catch (caught) {
+      setBookingError(caught instanceof Error ? caught.message : "Could not save this booking.");
+    }
   }
 
-  function approveBooking(booking: Booking) {
+  async function approveBooking(booking: Booking) {
     setBookingMessage("");
     setBookingError("");
     const itemId = booking.items[0]?.inventoryItemId;
@@ -1428,26 +1494,27 @@ export function BookingsPage() {
       return;
     }
 
-    setBookingRows((rows) =>
-      rows.map((entry) =>
-        entry.id === booking.id
-          ? { ...entry, bookingStatus: "Confirmed", updatedAt: new Date().toISOString() }
-          : entry
-      )
-    );
-    setBookingMessage(`${booking.bookingNumber} approved and confirmed.`);
+    const nextBooking = { ...booking, bookingStatus: "Confirmed" as BookingStatus, updatedAt: new Date().toISOString() };
+    try {
+      if (firebaseConfigured) await saveBooking(nextBooking);
+      setBookingRows((rows) => rows.map((entry) => (entry.id === booking.id ? nextBooking : entry)));
+      setBookingMessage(`${booking.bookingNumber} approved and confirmed.`);
+    } catch (caught) {
+      setBookingError(caught instanceof Error ? caught.message : "Could not approve this booking.");
+    }
   }
 
-  function cancelBooking(booking: Booking) {
+  async function cancelBooking(booking: Booking) {
     const confirmed = window.confirm(`Cancel ${booking.bookingNumber}?`);
     if (!confirmed) return;
-    setBookingRows((rows) =>
-      rows.map((entry) =>
-        entry.id === booking.id
-          ? { ...entry, bookingStatus: "Cancelled", updatedAt: new Date().toISOString() }
-          : entry
-      )
-    );
+    const nextBooking = { ...booking, bookingStatus: "Cancelled" as BookingStatus, updatedAt: new Date().toISOString() };
+    try {
+      if (firebaseConfigured) await saveBooking(nextBooking);
+      setBookingRows((rows) => rows.map((entry) => (entry.id === booking.id ? nextBooking : entry)));
+      setBookingMessage(`${booking.bookingNumber} cancelled.`);
+    } catch (caught) {
+      setBookingError(caught instanceof Error ? caught.message : "Could not cancel this booking.");
+    }
   }
 
   return (
@@ -1530,8 +1597,14 @@ function calculateRentalDays(pickup: string, returnAt: string) {
   return Math.max(1, Math.ceil((end - start) / (24 * 60 * 60 * 1000)));
 }
 
+function canUpdateInventoryRecord(item?: InventoryItem) {
+  if (!item) return false;
+  return item.id.startsWith("inv-local") || item.id.startsWith("inv-csv") || !/^inv-[a-z]+-\d+$/i.test(item.id);
+}
+
 export function PickupPage() {
-  const [bookingRows, setBookingRows] = useState(bookings);
+  const [bookingRows, setBookingRows] = useSyncedBookings();
+  const syncedItems = useSyncedInventoryItems();
   const [itemStatuses, setItemStatuses] = useState<Record<string, DressStatus>>({});
   const [query, setQuery] = useState("");
   const [selectedBookingId, setSelectedBookingId] = useState(bookings[0]?.id || "");
@@ -1552,11 +1625,19 @@ export function PickupPage() {
   const totals = booking ? bookingTotals(booking) : undefined;
   const paymentComplete = totals ? totals.balanceDue === 0 : false;
   const selectedItem = booking?.items[0];
-  const inventoryItem = inventoryItems.find((item) => item.id === selectedItem?.inventoryItemId);
+  const inventoryItem = syncedItems.find((item) => item.id === selectedItem?.inventoryItemId);
   const currentItemStatus = selectedItem ? itemStatuses[selectedItem.inventoryItemId] || inventoryItem?.currentStatus || "Available" : "Available";
   const scanMatches = selectedItem ? scannedDressId.trim().toLowerCase() === selectedItem.dressId.toLowerCase() : false;
   const canIssueStatus = !["Rented", "Cleaning", "Repair", "Damaged", "Lost", "Retired"].includes(currentItemStatus);
   const issueBlocked = booking?.bookingStatus === "Issued" || !scanMatches || !canIssueStatus || !conditionNotes.trim() || (!paymentComplete && !overrideReason.trim());
+
+  useEffect(() => {
+    if (bookingRows.length && !bookingRows.some((entry) => entry.id === selectedBookingId)) {
+      const nextBooking = bookingRows[0];
+      setSelectedBookingId(nextBooking.id);
+      setScannedDressId(nextBooking.items[0]?.dressId || "");
+    }
+  }, [bookingRows, selectedBookingId]);
 
   function selectBooking(id: string) {
     const next = bookingRows.find((entry) => entry.id === id);
@@ -1569,7 +1650,7 @@ export function PickupPage() {
     setPickupError("");
   }
 
-  function markIssued() {
+  async function markIssued() {
     setPickupMessage("");
     setPickupError("");
     if (!booking || !selectedItem) return;
@@ -1579,28 +1660,36 @@ export function PickupPage() {
       return;
     }
 
-    setBookingRows((rows) =>
-      rows.map((entry) =>
-        entry.id === booking.id
-          ? {
-              ...entry,
-              bookingStatus: "Issued",
-              paymentStatus: paymentComplete ? entry.paymentStatus : "Outstanding",
-              internalNotes: [
-                entry.internalNotes,
-                `Pickup condition: ${conditionNotes}`,
-                accessoryNotes ? `Accessories: ${accessoryNotes}` : "",
-                overrideReason ? `Manager override: ${overrideReason}` : ""
-              ]
-                .filter(Boolean)
-                .join(" | "),
-              updatedAt: new Date().toISOString()
-            }
-          : entry
-      )
-    );
-    setItemStatuses((statuses) => ({ ...statuses, [selectedItem.inventoryItemId]: "Rented" }));
-    setPickupMessage(`${booking.bookingNumber} issued. ${selectedItem.dressId} is now marked Rented.`);
+    const now = new Date().toISOString();
+    const nextBooking: Booking = {
+      ...booking,
+      bookingStatus: "Issued",
+      paymentStatus: paymentComplete ? booking.paymentStatus : "Outstanding",
+      internalNotes: [
+        booking.internalNotes,
+        `Pickup condition: ${conditionNotes}`,
+        accessoryNotes ? `Accessories: ${accessoryNotes}` : "",
+        overrideReason ? `Manager override: ${overrideReason}` : ""
+      ]
+        .filter(Boolean)
+        .join(" | "),
+      items: booking.items.map((item) =>
+        item.inventoryItemId === selectedItem.inventoryItemId ? { ...item, issueCondition: conditionNotes } : item
+      ),
+      updatedAt: now
+    };
+
+    try {
+      if (firebaseConfigured) {
+        await saveBooking(nextBooking);
+        if (inventoryItem && canUpdateInventoryRecord(inventoryItem)) await updateInventoryStatus(inventoryItem, "Rented");
+      }
+      setBookingRows((rows) => rows.map((entry) => (entry.id === booking.id ? nextBooking : entry)));
+      setItemStatuses((statuses) => ({ ...statuses, [selectedItem.inventoryItemId]: "Rented" }));
+      setPickupMessage(`${booking.bookingNumber} issued. ${selectedItem.dressId} is now marked Rented.`);
+    } catch (caught) {
+      setPickupError(caught instanceof Error ? caught.message : "Could not issue this booking.");
+    }
   }
 
   return (
@@ -1687,7 +1776,7 @@ export function PickupPage() {
         headers={["Booking", "Customer", "Dress", "Pickup", "Balance", "Booking Status", "Item Status"]}
         rows={bookingRows.map((entry) => {
           const firstItem = entry.items[0];
-          const status = firstItem ? itemStatuses[firstItem.inventoryItemId] || inventoryItems.find((item) => item.id === firstItem.inventoryItemId)?.currentStatus || "Available" : "Available";
+          const status = firstItem ? itemStatuses[firstItem.inventoryItemId] || syncedItems.find((item) => item.id === firstItem.inventoryItemId)?.currentStatus || "Available" : "Available";
           return [
             entry.bookingNumber,
             entry.customerName,
@@ -1704,12 +1793,13 @@ export function PickupPage() {
 }
 
 export function ReturnsPage() {
-  const [bookingRows, setBookingRows] = useState(bookings);
+  const [bookingRows, setBookingRows] = useSyncedBookings();
+  const syncedItems = useSyncedInventoryItems();
   const [itemStatuses, setItemStatuses] = useState<Record<string, DressStatus>>({});
   const [selectedBookingId, setSelectedBookingId] = useState(bookings[1]?.id || bookings[0]?.id || "");
   const selectedBooking = bookingRows.find((booking) => booking.id === selectedBookingId) || bookingRows[0];
   const selectedItem = selectedBooking?.items[0];
-  const inventoryItem = inventoryItems.find((item) => item.id === selectedItem?.inventoryItemId);
+  const inventoryItem = syncedItems.find((item) => item.id === selectedItem?.inventoryItemId);
   const [scannedDressId, setScannedDressId] = useState(bookings[1]?.items[0]?.dressId || bookings[0]?.items[0]?.dressId || "");
   const [returnCondition, setReturnCondition] = useState(selectedItem?.returnCondition || "");
   const [lateFees, setLateFees] = useState(String(selectedBooking?.lateFees ?? 0));
@@ -1738,6 +1828,14 @@ export function ReturnsPage() {
   const totals = adjustedBooking ? bookingTotals(adjustedBooking) : undefined;
   const canComplete = Boolean(selectedBooking && selectedItem && scanMatches && returnCondition.trim());
 
+  useEffect(() => {
+    if (bookingRows.length && !bookingRows.some((booking) => booking.id === selectedBookingId)) {
+      const nextBooking = bookingRows[0];
+      setSelectedBookingId(nextBooking.id);
+      setScannedDressId(nextBooking.items[0]?.dressId || "");
+    }
+  }, [bookingRows, selectedBookingId]);
+
   function selectBooking(id: string) {
     const nextBooking = bookingRows.find((booking) => booking.id === id);
     const nextItem = nextBooking?.items[0];
@@ -1748,7 +1846,7 @@ export function ReturnsPage() {
     setCleaningCharges(String(nextBooking?.cleaningCharges ?? 0));
     setDamageCharges(String(nextBooking?.damageCharges ?? 0));
     setMissingItemCharges(String(nextBooking?.missingItemCharges ?? 0));
-    setNextStatus((inventoryItems.find((item) => item.id === nextItem?.inventoryItemId)?.currentStatus as DressStatus) || "Returned - Inspection Pending");
+    setNextStatus((syncedItems.find((item) => item.id === nextItem?.inventoryItemId)?.currentStatus as DressStatus) || "Returned - Inspection Pending");
     setMessage("");
     setError("");
   }
@@ -1780,19 +1878,10 @@ export function ReturnsPage() {
 
     setSaving(true);
     try {
-      if (firebaseConfigured && !selectedBooking.id.startsWith("booking-")) {
-        await updateBookingReturnInspection(selectedBooking.id, {
-          bookingStatus: nextBooking.bookingStatus,
-          actualReturnDateTime: now,
-          lateFees: numericLateFees,
-          cleaningCharges: numericCleaningCharges,
-          damageCharges: numericDamageCharges,
-          missingItemCharges: numericMissingItemCharges,
-          refundableAmount: totals.refundableDeposit,
-          internalNotes: nextBooking.internalNotes
-        });
+      if (firebaseConfigured) {
+        await saveBooking(nextBooking);
       }
-      if (firebaseConfigured && inventoryItem && !inventoryItem.id.startsWith("inv-")) {
+      if (firebaseConfigured && inventoryItem && canUpdateInventoryRecord(inventoryItem)) {
         await updateInventoryStatus(inventoryItem, nextStatus);
       }
       setBookingRows((rows) => rows.map((booking) => (booking.id === selectedBooking.id ? nextBooking : booking)));
@@ -1869,7 +1958,7 @@ export function ReturnsPage() {
         headers={["Booking", "Customer", "Dress", "Return due", "Returned", "Booking Status", "Item Status"]}
         rows={bookingRows.map((booking) => {
           const firstItem = booking.items[0];
-          const itemStatus = firstItem ? itemStatuses[firstItem.inventoryItemId] || inventoryItems.find((item) => item.id === firstItem.inventoryItemId)?.currentStatus || "Available" : "Available";
+          const itemStatus = firstItem ? itemStatuses[firstItem.inventoryItemId] || syncedItems.find((item) => item.id === firstItem.inventoryItemId)?.currentStatus || "Available" : "Available";
           return [
             booking.bookingNumber,
             booking.customerName,
@@ -1886,8 +1975,8 @@ export function ReturnsPage() {
 }
 
 export function PaymentsPage() {
-  const [bookingRows, setBookingRows] = useState(bookings);
-  const [paymentRows, setPaymentRows] = useState(payments);
+  const [bookingRows, setBookingRows] = useSyncedBookings();
+  const [paymentRows, setPaymentRows] = useSyncedPayments();
   const [selectedBookingId, setSelectedBookingId] = useState(bookings[0]?.id || "");
   const [transactionType, setTransactionType] = useState<PaymentTransactionType>("Balance Payment");
   const [method, setMethod] = useState<PaymentMethod>("UPI");
@@ -1910,6 +1999,15 @@ export function PaymentsPage() {
   const upiMissing = method === "UPI" && cleanedUpi.length === 0;
   const bankReferenceMissing = method === "Bank Transfer" && cleanedBankReference.length === 0;
   const paymentBlocked = saving || !selectedBooking || !Number.isFinite(amountValue) || amountValue <= 0 || duplicate || upiMissing || bankReferenceMissing;
+
+  useEffect(() => {
+    if (bookingRows.length && !bookingRows.some((booking) => booking.id === selectedBookingId)) {
+      const nextBooking = bookingRows[0];
+      setSelectedBookingId(nextBooking.id);
+      const nextTotals = bookingTotals(nextBooking);
+      setAmount(String(nextTotals.balanceDue || nextTotals.deposit || ""));
+    }
+  }, [bookingRows, selectedBookingId]);
 
   const paymentMethods: PaymentMethod[] = ["Cash", "UPI", "Bank Transfer", "Mixed Payment", "Refund", "Deposit Adjustment"];
   const transactionTypes: PaymentTransactionType[] = [
@@ -1986,6 +2084,12 @@ export function PaymentsPage() {
     const receivedDelta = shouldIncreaseReceived(transactionType) ? amountValue : 0;
     const nextTotalReceived = selectedBooking.totalReceived + receivedDelta;
     const nextPaymentStatus = shouldIncreaseReceived(transactionType) ? getPaymentStatus(selectedBooking, nextTotalReceived) : selectedBooking.paymentStatus;
+    const nextBooking: Booking = {
+      ...selectedBooking,
+      totalReceived: nextTotalReceived,
+      paymentStatus: nextPaymentStatus,
+      updatedAt: now
+    };
 
     setSaving(true);
     try {
@@ -1993,7 +2097,7 @@ export function PaymentsPage() {
       if (firebaseConfigured) {
         savedId = await addPaymentTransaction(paymentPayload);
         if (receivedDelta > 0) {
-          await updateBookingPaymentSummary(selectedBooking.id, nextTotalReceived, nextPaymentStatus);
+          await saveBooking(nextBooking);
         }
       }
 
@@ -2008,7 +2112,7 @@ export function PaymentsPage() {
         setBookingRows((rows) =>
           rows.map((booking) =>
             booking.id === selectedBooking.id
-              ? { ...booking, totalReceived: nextTotalReceived, paymentStatus: nextPaymentStatus, updatedAt: now }
+              ? nextBooking
               : booking
           )
         );
@@ -2164,8 +2268,8 @@ export function PaymentsPage() {
 }
 
 export function DepositsPage() {
-  const [bookingRows, setBookingRows] = useState(bookings);
-  const [refundRows, setRefundRows] = useState(refunds);
+  const [bookingRows, setBookingRows] = useSyncedBookings();
+  const [refundRows, setRefundRows] = useSyncedRefunds();
   const [selectedBookingId, setSelectedBookingId] = useState(bookings[1]?.id || bookings[0]?.id || "");
   const [lateFees, setLateFees] = useState(String(bookings[1]?.lateFees ?? 0));
   const [cleaningCharges, setCleaningCharges] = useState(String(bookings[1]?.cleaningCharges ?? 0));
@@ -2186,6 +2290,17 @@ export function DepositsPage() {
   const refundableAmount = Math.max(depositTotal - deductions, 0);
   const deductionNeedsApproval = deductions > settings.refundApprovalLimit;
   const hasExistingRefund = selectedBooking ? refundRows.some((refund) => refund.bookingNumber === selectedBooking.bookingNumber && refund.status !== "Rejected") : false;
+
+  useEffect(() => {
+    if (bookingRows.length && !bookingRows.some((booking) => booking.id === selectedBookingId)) {
+      const nextBooking = bookingRows[0];
+      setSelectedBookingId(nextBooking.id);
+      setLateFees(String(nextBooking.lateFees));
+      setCleaningCharges(String(nextBooking.cleaningCharges));
+      setDamageCharges(String(nextBooking.damageCharges));
+      setMissingItemCharges(String(nextBooking.missingItemCharges));
+    }
+  }, [bookingRows, selectedBookingId]);
 
   function selectBooking(id: string) {
     const nextBooking = bookingRows.find((booking) => booking.id === id);
@@ -2214,34 +2329,24 @@ export function DepositsPage() {
     if (!selectedBooking) return;
 
     const depositStatus = getDepositStatus(deductions, refundableAmount);
+    const nextBooking: Booking = {
+      ...selectedBooking,
+      lateFees: numericLateFees,
+      cleaningCharges: numericCleaningCharges,
+      damageCharges: numericDamageCharges,
+      missingItemCharges: numericMissingItemCharges,
+      refundableAmount,
+      depositStatus,
+      updatedAt: new Date().toISOString()
+    };
     setSaving(true);
     try {
-      if (firebaseConfigured && !selectedBooking.id.startsWith("booking-")) {
-        await updateBookingDepositSettlement(selectedBooking.id, {
-          lateFees: numericLateFees,
-          cleaningCharges: numericCleaningCharges,
-          damageCharges: numericDamageCharges,
-          missingItemCharges: numericMissingItemCharges,
-          refundableAmount,
-          depositStatus
-        });
+      if (firebaseConfigured) {
+        await saveBooking(nextBooking);
       }
 
       setBookingRows((rows) =>
-        rows.map((booking) =>
-          booking.id === selectedBooking.id
-            ? {
-                ...booking,
-                lateFees: numericLateFees,
-                cleaningCharges: numericCleaningCharges,
-                damageCharges: numericDamageCharges,
-                missingItemCharges: numericMissingItemCharges,
-                refundableAmount,
-                depositStatus,
-                updatedAt: new Date().toISOString()
-              }
-            : booking
-        )
+        rows.map((booking) => (booking.id === selectedBooking.id ? nextBooking : booking))
       );
       setMessage("Deposit settlement saved.");
     } catch (caught) {
@@ -2302,6 +2407,11 @@ export function DepositsPage() {
       );
 
       if (status === "Paid") {
+        const paidBooking = bookingRows.find((booking) => booking.bookingNumber === refund.bookingNumber);
+        const nextBooking = paidBooking
+          ? { ...paidBooking, depositStatus: "Refunded" as DepositStatus, refundableAmount: 0, updatedAt: new Date().toISOString() }
+          : undefined;
+        if (firebaseConfigured && nextBooking) await saveBooking(nextBooking);
         setBookingRows((rows) =>
           rows.map((booking) =>
             booking.bookingNumber === refund.bookingNumber

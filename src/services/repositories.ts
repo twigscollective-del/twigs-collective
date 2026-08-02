@@ -76,6 +76,23 @@ export async function saveCustomer(customer: Customer) {
   await setDoc(doc(db, "customers", customer.id), cleanObject({ ...customer }), { merge: true });
 }
 
+export async function listBookings(fallback: Booking[]) {
+  return listCollection<Booking>("bookings", fallback);
+}
+
+export async function saveBooking(booking: Booking) {
+  if (!db) throw new Error("Firebase is not configured.");
+  await setDoc(doc(db, "bookings", booking.id), cleanObject({ ...booking }), { merge: true });
+}
+
+export async function listPayments(fallback: PaymentTransaction[]) {
+  return listCollection<PaymentTransaction>("payments", fallback);
+}
+
+export async function listRefunds(fallback: Refund[]) {
+  return listCollection<Refund>("refunds", fallback);
+}
+
 export async function saveBookingRequest(payload: Omit<Booking, "id" | "createdAt" | "updatedAt">) {
   if (!db) throw new Error("Firebase is not configured. Copy .env.example to .env.local and add your project values.");
   const ref = await addDoc(collection(db, "bookings"), {
