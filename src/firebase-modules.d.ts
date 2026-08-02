@@ -55,5 +55,9 @@ declare module "firebase/storage" {
   import type { FirebaseApp } from "firebase/app";
 
   export interface FirebaseStorage {}
+  export interface StorageReference {}
   export function getStorage(app: FirebaseApp): FirebaseStorage;
+  export function ref(storage: FirebaseStorage, path: string): StorageReference;
+  export function uploadBytes(ref: StorageReference, data: Blob | Uint8Array | ArrayBuffer, metadata?: Record<string, unknown>): Promise<unknown>;
+  export function getDownloadURL(ref: StorageReference): Promise<string>;
 }

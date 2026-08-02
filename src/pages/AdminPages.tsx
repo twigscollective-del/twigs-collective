@@ -40,6 +40,8 @@ import {
   addPaymentTransaction,
   addRefundRecord,
   addRepairRecord,
+  saveInventoryItem,
+  saveShopSettings,
   updateBookingDepositSettlement,
   updateBookingPaymentSummary,
   updateBookingReturnInspection,
@@ -49,7 +51,7 @@ import {
   updatePaymentVerificationStatus,
   updateRefundStatus,
   updateRepairRecordStatus,
-  saveShopSettings
+  uploadInventoryMedia
 } from "../services/repositories";
 import {
   auditLogs,
@@ -221,8 +223,17 @@ export function InventoryPage() {
   const [price, setPrice] = useState("500");
   const [securityDeposit, setSecurityDeposit] = useState("500");
   const [itemCount, setItemCount] = useState("1");
-  const [imageUrls, setImageUrls] = useState<string[]>([]);
-  const [shortVideoUrl, setShortVideoUrl] = useState("");
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [shortVideoFile, setShortVideoFile] = useState<File | null>(null);
+  const [shortVideoPreview, setShortVideoPreview] = useState("");
+  const [existingImages, setExistingImages] = useState<string[]>([]);
+  const [existingShortVideo, setExistingShortVideo] = useState("");
+  const [inventoryMessage, setInventoryMessage] = useState("");
+  const [inventoryError, setInventoryError] = useState("");
+  const [savingInventory, setSavingInventory] = useState(false);
+  const [pendingCsvItems, setPendingCsvItems] = useState<InventoryItem[]>([]);
+  const [savingCsvItems, setSavingCsvItems] = useState(false);
   const [csvMessage, setCsvMessage] = useState("");
   const [csvError, setCsvError] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -251,18 +262,37 @@ export function InventoryPage() {
       .catch(() => setQrDataUrl(""));
   }, [qrItem]);
 
-  function addItem(event: FormEvent) {
+  async function addItem(event: FormEvent) {
     event.preventDefault();
+    setInventoryMessage("");
+    setInventoryError("");
     const count = Math.max(1, Math.min(Number(itemCount) || 1, 100));
     if (Number(price) <= 0) return;
     const code = categories.find((entry) => entry.name === category)?.code || "GEN";
     const now = Date.now();
+    const mediaOwnerId = editingId || `inv-local-${now}`;
 
-    if (editingId) {
-      setItems((currentItems) =>
-        currentItems.map((item) =>
+    setSavingInventory(true);
+    try {
+      const uploadedImages = imageFiles.length && firebaseConfigured
+        ? await uploadInventoryMedia(mediaOwnerId, imageFiles, "dressImages")
+        : [];
+      const uploadedVideos = shortVideoFile && firebaseConfigured
+        ? await uploadInventoryMedia(mediaOwnerId, [shortVideoFile], "dressVideos")
+        : [];
+      const nextImages = uploadedImages.length ? uploadedImages : existingImages;
+      const nextFeaturedImage = nextImages[0] || items[0].featuredImage;
+      const nextShortVideo = uploadedVideos[0] || existingShortVideo || undefined;
+
+      if ((imageFiles.length || shortVideoFile) && !firebaseConfigured) {
+        setInventoryError("Firebase is not configured, so uploaded media was not saved. Add Firebase values and try again.");
+        return;
+      }
+
+      if (editingId) {
+        const updatedItems = items.map((item) =>
           item.id === editingId
-            ? {
+            ? ({
                 ...item,
                 name,
                 category,
@@ -279,62 +309,71 @@ export function InventoryPage() {
                 remarks,
                 rentalPrice: Number(price),
                 securityDeposit: Number(securityDeposit),
-                images: imageUrls.length ? imageUrls : item.images,
-                featuredImage: imageUrls[0] || item.featuredImage,
-                shortVideo: shortVideoUrl || item.shortVideo,
+                images: nextImages.length ? nextImages : item.images,
+                featuredImage: nextFeaturedImage || item.featuredImage,
+                shortVideo: nextShortVideo || item.shortVideo,
                 updatedAt: new Date().toISOString()
-              }
+              } as InventoryItem)
             : item
-        )
-      );
-      resetInventoryForm();
-      return;
-    }
+        );
+        const updatedItem = updatedItems.find((item) => item.id === editingId);
+        if (updatedItem && firebaseConfigured) await saveInventoryItem(updatedItem);
+        setItems(updatedItems);
+        setInventoryMessage("Inventory item updated. Media files are stored in Firebase Storage; Firestore stores only URLs.");
+        resetInventoryForm();
+        return;
+      }
 
-    const nextItems = Array.from({ length: count }, (_, index): InventoryItem => ({
-      ...items[0],
-      id: `inv-local-${now}-${index + 1}`,
-      dressId: `TC-${code}-${String(items.length + index + 1).padStart(3, "0")}`,
-      name: count > 1 ? `${name} ${index + 1}` : name,
-      category,
-      size,
-      storageLocation: location,
-      ageGroup,
-      gender: gender as InventoryItem["gender"],
-      currentStatus,
-      shoulder,
-      bust,
-      waist,
-      hip,
-      length,
-      remarks,
-      rentalPrice: Number(price),
-      securityDeposit: Number(securityDeposit),
-      images: imageUrls.length ? imageUrls : items[0].images,
-      featuredImage: imageUrls[0] || items[0].featuredImage,
-      shortVideo: shortVideoUrl || undefined,
-      publicVisible: true,
-      featured: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    }));
-    setItems([...nextItems, ...items]);
-    setImageUrls([]);
-    if (shortVideoUrl) URL.revokeObjectURL(shortVideoUrl);
-    setShortVideoUrl("");
-    setShoulder("");
-    setBust("");
-    setWaist("");
-    setHip("");
-    setLength("");
-    setRemarks("");
-    setSecurityDeposit("500");
+      const nextItems = Array.from({ length: count }, (_, index): InventoryItem => ({
+        ...items[0],
+        id: `inv-local-${now}-${index + 1}`,
+        dressId: `TC-${code}-${String(items.length + index + 1).padStart(3, "0")}`,
+        name: count > 1 ? `${name} ${index + 1}` : name,
+        category,
+        size,
+        storageLocation: location,
+        ageGroup,
+        gender: gender as InventoryItem["gender"],
+        currentStatus,
+        shoulder,
+        bust,
+        waist,
+        hip,
+        length,
+        remarks,
+        rentalPrice: Number(price),
+        securityDeposit: Number(securityDeposit),
+        images: nextImages.length ? nextImages : items[0].images,
+        featuredImage: nextFeaturedImage,
+        shortVideo: nextShortVideo,
+        publicVisible: true,
+        featured: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }));
+      if (firebaseConfigured) {
+        await Promise.all(nextItems.map((item) => saveInventoryItem(item)));
+      }
+      setItems([...nextItems, ...items]);
+      setInventoryMessage(`Saved ${nextItems.length} item${nextItems.length === 1 ? "" : "s"}. Media files are in Firebase Storage; Firestore documents stay small.`);
+      resetInventoryForm();
+    } catch (error) {
+      setInventoryError(error instanceof Error ? error.message : "Could not save this inventory item.");
+    } finally {
+      setSavingInventory(false);
+    }
   }
 
   function resetInventoryForm() {
     setEditingId(null);
-    setImageUrls([]);
-    setShortVideoUrl("");
+    imagePreviews.forEach((url) => URL.revokeObjectURL(url));
+    if (shortVideoPreview.startsWith("blob:")) URL.revokeObjectURL(shortVideoPreview);
+    setImageFiles([]);
+    setImagePreviews([]);
+    setShortVideoFile(null);
+    setShortVideoPreview("");
+    setExistingImages([]);
+    setExistingShortVideo("");
     setShoulder("");
     setBust("");
     setWaist("");
@@ -346,15 +385,42 @@ export function InventoryPage() {
     setItemCount("1");
   }
 
-  function selectImages(files: FileList | null) {
+  async function selectImages(files: FileList | null) {
     if (!files) return;
-    imageUrls.forEach((url) => URL.revokeObjectURL(url));
-    setImageUrls(Array.from(files).map((file) => URL.createObjectURL(file)));
+    imagePreviews.forEach((url) => URL.revokeObjectURL(url));
+    setInventoryError("");
+    const selectedFiles = Array.from(files).slice(0, 6);
+    try {
+      const compressedFiles = await Promise.all(selectedFiles.map((file) => compressImageFile(file)));
+      const largeFile = compressedFiles.find((file) => file.size > 1.5 * 1024 * 1024);
+      if (largeFile) {
+        setInventoryError("One image is still larger than 1.5 MB after compression. Please choose a smaller image.");
+        setImageFiles([]);
+        setImagePreviews([]);
+        return;
+      }
+      setImageFiles(compressedFiles);
+      setImagePreviews(compressedFiles.map((file) => URL.createObjectURL(file)));
+      setInventoryMessage(`Compressed ${compressedFiles.length} image${compressedFiles.length === 1 ? "" : "s"} for upload.`);
+    } catch (error) {
+      setInventoryError(error instanceof Error ? error.message : "Could not compress selected images.");
+      setImageFiles([]);
+      setImagePreviews([]);
+    }
   }
 
   function selectShortVideo(file: File | null) {
-    if (shortVideoUrl) URL.revokeObjectURL(shortVideoUrl);
-    setShortVideoUrl(file ? URL.createObjectURL(file) : "");
+    if (shortVideoPreview.startsWith("blob:")) URL.revokeObjectURL(shortVideoPreview);
+    setInventoryError("");
+    if (file && file.size > 25 * 1024 * 1024) {
+      setShortVideoFile(null);
+      setShortVideoPreview(existingShortVideo);
+      setInventoryError("Short video must be 25 MB or smaller. Please trim or compress the video before uploading.");
+      return;
+    }
+    setShortVideoFile(file);
+    setShortVideoPreview(file ? URL.createObjectURL(file) : existingShortVideo);
+    if (file) setInventoryMessage("Short video selected. Keep it brief so storage and bandwidth stay low.");
   }
 
   function duplicate(item: InventoryItem) {
@@ -386,8 +452,16 @@ export function InventoryPage() {
     setPrice(String(item.rentalPrice));
     setSecurityDeposit(String(item.securityDeposit));
     setItemCount("1");
-    setImageUrls([]);
-    setShortVideoUrl(item.shortVideo || "");
+    imagePreviews.forEach((url) => URL.revokeObjectURL(url));
+    if (shortVideoPreview.startsWith("blob:")) URL.revokeObjectURL(shortVideoPreview);
+    setImageFiles([]);
+    setImagePreviews([]);
+    setShortVideoFile(null);
+    setShortVideoPreview(item.shortVideo || "");
+    setExistingImages(item.images);
+    setExistingShortVideo(item.shortVideo || "");
+    setInventoryMessage("");
+    setInventoryError("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -523,10 +597,35 @@ export function InventoryPage() {
         return;
       }
 
-      setItems([...imported, ...items]);
-      setCsvMessage(`Imported ${imported.length} item${imported.length === 1 ? "" : "s"} from CSV.`);
+      setPendingCsvItems(imported);
+      setCsvMessage(`Ready to save ${imported.length} imported item${imported.length === 1 ? "" : "s"}. Review, then click Save imported CSV items.`);
     } catch (error) {
       setCsvError(error instanceof Error ? error.message : "Could not import this CSV file.");
+    }
+  }
+
+  async function saveImportedCsvItems() {
+    setCsvMessage("");
+    setCsvError("");
+    if (pendingCsvItems.length === 0) {
+      setCsvError("Import a CSV file before saving.");
+      return;
+    }
+    if (!firebaseConfigured) {
+      setCsvError("Firebase is not configured, so imported CSV items cannot be saved permanently.");
+      return;
+    }
+
+    setSavingCsvItems(true);
+    try {
+      await Promise.all(pendingCsvItems.map((item) => saveInventoryItem(item)));
+      setItems([...pendingCsvItems, ...items]);
+      setCsvMessage(`Saved ${pendingCsvItems.length} imported item${pendingCsvItems.length === 1 ? "" : "s"} to Firestore.`);
+      setPendingCsvItems([]);
+    } catch (error) {
+      setCsvError(error instanceof Error ? error.message : "Could not save imported CSV items.");
+    } finally {
+      setSavingCsvItems(false);
     }
   }
 
@@ -573,6 +672,7 @@ export function InventoryPage() {
             <TextAreaField label="Remarks" value={remarks} onChange={setRemarks} placeholder="Condition notes, fitting notes, accessories, or special handling." />
             <label className="grid gap-1.5 text-sm font-semibold text-charcoal">
               Dress photographs
+              <span className="text-xs font-semibold text-charcoal/55">Up to 6 images. Images are compressed before upload.</span>
               <input
                 className="rounded-md border border-forest/15 bg-white px-3 py-2 text-charcoal file:mr-3 file:rounded-md file:border-0 file:bg-forest file:px-3 file:py-2 file:font-bold file:text-cream"
                 type="file"
@@ -581,13 +681,13 @@ export function InventoryPage() {
                 onChange={(event) => selectImages(event.target.files)}
               />
             </label>
-            {imageUrls.length > 0 && (
+            {imagePreviews.length > 0 && (
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.12em] text-charcoal/45">
-                  First image becomes featured
+                  First uploaded image becomes featured
                 </p>
                 <div className="mt-2 grid grid-cols-3 gap-2">
-                  {imageUrls.map((url, index) => (
+                  {imagePreviews.map((url, index) => (
                     <img
                       key={url}
                       src={url}
@@ -600,6 +700,7 @@ export function InventoryPage() {
             )}
             <label className="grid gap-1.5 text-sm font-semibold text-charcoal">
               Short video
+              <span className="text-xs font-semibold text-charcoal/55">25 MB maximum. Trim or compress videos before upload.</span>
               <input
                 className="rounded-md border border-forest/15 bg-white px-3 py-2 text-charcoal file:mr-3 file:rounded-md file:border-0 file:bg-forest file:px-3 file:py-2 file:font-bold file:text-cream"
                 type="file"
@@ -607,16 +708,18 @@ export function InventoryPage() {
                 onChange={(event) => selectShortVideo(event.target.files?.[0] || null)}
               />
             </label>
-            {shortVideoUrl && (
+            {shortVideoPreview && (
               <div className="rounded-md border border-forest/10 bg-cream p-3">
                 <p className="mb-2 text-xs font-bold uppercase tracking-[0.12em] text-charcoal/45">
                   Short video preview
                 </p>
-                <video className="aspect-video w-full rounded-md bg-black object-contain" src={shortVideoUrl} controls />
+                <video className="aspect-video w-full rounded-md bg-black object-contain" src={shortVideoPreview} controls />
               </div>
             )}
-            <button className="inline-flex items-center justify-center gap-2 rounded-md bg-forest px-4 py-2 font-bold text-cream hover:bg-leaf">
-              <Plus className="h-4 w-4" /> {editingId ? "Update item" : "Add sample item"}
+            {inventoryMessage && <p className="rounded-md bg-emerald-50 p-3 text-sm font-semibold text-emerald-900">{inventoryMessage}</p>}
+            {inventoryError && <p className="rounded-md bg-red-50 p-3 text-sm font-semibold text-red-800">{inventoryError}</p>}
+            <button disabled={savingInventory} className="inline-flex items-center justify-center gap-2 rounded-md bg-forest px-4 py-2 font-bold text-cream hover:bg-leaf disabled:cursor-not-allowed disabled:bg-stone-300">
+              <Plus className="h-4 w-4" /> {savingInventory ? "Saving..." : editingId ? "Update item" : "Add sample item"}
             </button>
             <div className="rounded-lg border border-dashed border-forest/20 bg-cream p-4">
               <h3 className="font-bold text-forest">Bulk add items</h3>
@@ -645,6 +748,35 @@ export function InventoryPage() {
                   />
                 </label>
               </div>
+              {pendingCsvItems.length > 0 && (
+                <div className="mt-3 rounded-md border border-forest/10 bg-white p-3">
+                  <p className="text-sm font-semibold text-charcoal/70">
+                    {pendingCsvItems.length} imported item{pendingCsvItems.length === 1 ? "" : "s"} waiting to be saved.
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={saveImportedCsvItems}
+                      disabled={savingCsvItems}
+                      className="inline-flex items-center gap-2 rounded-md bg-forest px-4 py-2 text-sm font-bold text-cream disabled:cursor-not-allowed disabled:bg-stone-300"
+                    >
+                      <Plus className="h-4 w-4" /> {savingCsvItems ? "Saving..." : "Save imported CSV items"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPendingCsvItems([]);
+                        setCsvMessage("");
+                        setCsvError("");
+                      }}
+                      disabled={savingCsvItems}
+                      className="rounded-md border border-forest/20 px-4 py-2 text-sm font-bold text-forest disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Clear import
+                    </button>
+                  </div>
+                </div>
+              )}
               {csvMessage && <p className="mt-3 rounded-md bg-emerald-50 p-3 text-sm font-semibold text-emerald-900">{csvMessage}</p>}
               {csvError && <p className="mt-3 rounded-md bg-red-50 p-3 text-sm font-semibold text-red-800">{csvError}</p>}
             </div>
@@ -797,6 +929,39 @@ function rowValue(row: Record<string, string>, ...keys: string[]) {
     if (value) return value;
   }
   return "";
+}
+
+async function compressImageFile(file: File, maxSide = 1400, quality = 0.78): Promise<File> {
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const element = new Image();
+    element.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(element);
+    };
+    element.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error(`Could not read ${file.name}.`));
+    };
+    element.src = url;
+  });
+
+  const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(image.width * scale));
+  canvas.height = Math.max(1, Math.round(image.height * scale));
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Image compression is not supported in this browser.");
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((nextBlob) => {
+      if (nextBlob) resolve(nextBlob);
+      else reject(new Error(`Could not compress ${file.name}.`));
+    }, "image/jpeg", quality);
+  });
+  const name = file.name.replace(/\.[^.]+$/, "") || "dress-image";
+  return new File([blob], `${name}.jpg`, { type: "image/jpeg", lastModified: Date.now() });
 }
 
 function rowToInventoryItems(row: Record<string, string>, position: number): InventoryItem[] {

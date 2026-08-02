@@ -12,6 +12,7 @@ import {
   updateDoc,
   where
 } from "firebase/firestore";
+import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
 import type {
   AuditLog,
   Booking,
@@ -26,12 +27,17 @@ import type {
   ShopSettings
 } from "../types";
 import { db } from "./firebase";
+import { storage } from "./firebase";
 import { findAvailabilityConflicts } from "../utils/availability";
 
 type FirestoreEntry = { id: string; data: () => Record<string, unknown> };
 
 function cleanObject<T extends Record<string, unknown>>(entry: T) {
   return Object.fromEntries(Object.entries(entry).filter(([, value]) => value !== undefined));
+}
+
+function safeFileName(name: string) {
+  return name.toLowerCase().replace(/[^a-z0-9.\-_]+/g, "-").replace(/^-+|-+$/g, "") || "upload";
 }
 
 export async function listCollection<T>(collectionName: string, fallback: T[]) {
@@ -263,6 +269,41 @@ export async function updateInventoryStatus(item: InventoryItem, status: Invento
     currentStatus: status,
     updatedAt: serverTimestamp()
   });
+}
+
+export async function uploadInventoryMedia(
+  itemId: string,
+  files: File[],
+  folder: "dressImages" | "dressVideos"
+) {
+  if (!storage) throw new Error("Firebase Storage is not configured.");
+  const activeStorage = storage;
+  const uploaded = await Promise.all(
+    files.map(async (file, index) => {
+      const path = `${folder}/${itemId}/${Date.now()}-${index + 1}-${safeFileName(file.name)}`;
+      const ref = storageRef(activeStorage, path);
+      await uploadBytes(ref, file, {
+        contentType: file.type,
+        customMetadata: {
+          itemId,
+          originalName: file.name
+        }
+      });
+      return getDownloadURL(ref);
+    })
+  );
+  return uploaded;
+}
+
+export async function saveInventoryItem(item: InventoryItem) {
+  if (!db) throw new Error("Firebase is not configured.");
+  const safeItem = {
+    ...item,
+    images: item.images.filter((url) => !url.startsWith("blob:") && !url.startsWith("data:")),
+    featuredImage: item.featuredImage.startsWith("blob:") || item.featuredImage.startsWith("data:") ? "" : item.featuredImage,
+    shortVideo: item.shortVideo?.startsWith("blob:") || item.shortVideo?.startsWith("data:") ? undefined : item.shortVideo
+  };
+  await setDoc(doc(db, "inventoryItems", item.id), cleanObject(safeItem), { merge: true });
 }
 
 export async function latestAuditLogs() {

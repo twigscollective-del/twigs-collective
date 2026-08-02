@@ -18,13 +18,22 @@ service firebase.storage {
       return request.resource.contentType.matches("image/.*");
     }
 
+    function isVideo() {
+      return request.resource.contentType.matches("video/.*");
+    }
+
     function under(limitMb) {
       return request.resource.size < limitMb * 1024 * 1024;
     }
 
     match /dressImages/{itemId}/{fileName} {
       allow read: if true;
-      allow write: if signedIn() && role() in ["owner", "manager", "inventory"] && isImage() && under(8);
+      allow write: if signedIn() && role() in ["owner", "manager", "inventory"] && isImage() && under(2);
+    }
+
+    match /dressVideos/{itemId}/{fileName} {
+      allow read: if true;
+      allow write: if signedIn() && role() in ["owner", "manager", "inventory"] && isVideo() && under(25);
     }
 
     match /customerDocuments/{customerId}/{fileName} {

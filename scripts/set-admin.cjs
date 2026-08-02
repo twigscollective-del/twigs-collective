@@ -1,14 +1,16 @@
-const admin = require("firebase-admin");
+const { initializeApp, cert } = require("firebase-admin/app");
+const { getAuth } = require("firebase-admin/auth");
 const serviceAccount = require("../service-account.json");
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
+initializeApp({
+  credential: cert(serviceAccount)
 });
 
 async function main() {
-  const user = await admin.auth().getUserByEmail("twigscollective@gmail.com");
+  const auth = getAuth();
+  const user = await auth.getUserByEmail("twigscollective@gmail.com");
 
-  await admin.auth().setCustomUserClaims(user.uid, {
+  await auth.setCustomUserClaims(user.uid, {
     ...(user.customClaims || {}),
     role: "owner"
   });
