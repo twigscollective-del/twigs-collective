@@ -28,6 +28,8 @@ export function TextField({
   );
 }
 
+type SelectOption = string | { value: string; label: string };
+
 export function SelectField({
   label,
   value,
@@ -37,7 +39,7 @@ export function SelectField({
   label: string;
   value: string;
   onChange: (value: string) => void;
-  options: string[];
+  options: SelectOption[];
 }) {
   return (
     <label className="grid min-w-0 gap-1.5 text-sm font-semibold text-charcoal">
@@ -47,11 +49,15 @@ export function SelectField({
         value={value}
         onChange={(event) => onChange(event.target.value)}
       >
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
+        {options.map((option) => {
+          const value = typeof option === "string" ? option : option.value;
+          const label = typeof option === "string" ? option : option.label;
+          return (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          );
+        })}
       </select>
     </label>
   );

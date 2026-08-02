@@ -1585,11 +1585,27 @@ export function BookingsPage() {
         <form onSubmit={createBooking}>
           <Panel title="New booking">
             <div className="grid gap-4">
-            <SelectField label="Customer" value={selectedCustomerId} onChange={setSelectedCustomerId} options={customerRows.map((entry) => entry.id)} />
+            <SelectField
+              label="Customer"
+              value={selectedCustomerId}
+              onChange={setSelectedCustomerId}
+              options={customerRows.map((entry) => ({
+                value: entry.id,
+                label: `${entry.customerId} - ${entry.fullName}`
+              }))}
+            />
             <p className="rounded-md bg-cream p-3 text-sm font-semibold text-charcoal/70">
               {customer.customerId} - {customer.fullName} - {customer.mobile}
             </p>
-            <SelectField label="Physical item" value={selectedItemId} onChange={setSelectedItemId} options={syncedItems.map((entry) => entry.id)} />
+            <SelectField
+              label="Physical item"
+              value={selectedItemId}
+              onChange={setSelectedItemId}
+              options={syncedItems.map((entry) => ({
+                value: entry.id,
+                label: `${entry.dressId} - ${entry.name}`
+              }))}
+            />
             <p className="rounded-md bg-cream p-3 text-sm font-semibold text-charcoal/70">
               {item.dressId} - {item.name} - Rent {formatCurrency(item.rentalPrice)} - Deposit {formatCurrency(item.securityDeposit)}
             </p>
