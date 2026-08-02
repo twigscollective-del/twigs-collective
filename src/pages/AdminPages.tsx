@@ -40,6 +40,7 @@ import {
   addPaymentTransaction,
   addRefundRecord,
   addRepairRecord,
+  deleteCustomer,
   listBookings,
   listInventoryItems,
   listCustomers,
@@ -1282,9 +1283,47 @@ export function CustomersPage() {
   const [landmark, setLandmark] = useState("");
   const [documentType, setDocumentType] = useState("Aadhaar");
   const [documentProofNumber, setDocumentProofNumber] = useState("");
+  const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+
+  function resetCustomerForm() {
+    setEditingCustomerId(null);
+    setName("New Customer");
+    setMobile("+91 ");
+    setAddress("Aizawl");
+    setLandmark("");
+    setDocumentType("Aadhaar");
+    setDocumentProofNumber("");
+  }
+
+  function editCustomer(customer: Customer) {
+    setMessage("");
+    setError("");
+    setEditingCustomerId(customer.id);
+    setName(customer.fullName);
+    setMobile(customer.mobile);
+    setAddress(customer.address || customer.town || "");
+    setLandmark(customer.landmark || "");
+    setDocumentType(customer.identificationType || "Aadhaar");
+    setDocumentProofNumber(customer.identificationNumber || "");
+  }
+
+  async function deleteCustomerRecord(customer: Customer) {
+    const confirmed = window.confirm(`Remove ${customer.fullName} from the active customer list?`);
+    if (!confirmed) return;
+    setMessage("");
+    setError("");
+    try {
+      if (firebaseConfigured) await deleteCustomer(customer.id);
+      setRows((currentRows) => currentRows.filter((row) => row.id !== customer.id));
+      if (editingCustomerId === customer.id) resetCustomerForm();
+      setMessage(`${customer.fullName} removed from the active customer list.`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not delete customer.");
+    }
+  }
 
   async function addCustomer(event: FormEvent) {
     event.preventDefault();
@@ -1302,10 +1341,12 @@ export function CustomersPage() {
       setError("Enter the document proof number.");
       return;
     }
+    const editingCustomer = rows.find((customer) => customer.id === editingCustomerId);
+    const now = new Date().toISOString();
     const next: Customer = {
-      ...customers[0],
-      id: `cust-local-${Date.now()}`,
-      customerId: `TC-CUS-${String(rows.length + 1).padStart(3, "0")}`,
+      ...(editingCustomer || customers[0]),
+      id: editingCustomer?.id || `cust-local-${Date.now()}`,
+      customerId: editingCustomer?.customerId || `TC-CUS-${String(rows.length + 1).padStart(3, "0")}`,
       fullName: name,
       mobile,
       address: address.trim(),
@@ -1313,23 +1354,28 @@ export function CustomersPage() {
       landmark: landmark.trim() || undefined,
       identificationType: documentType,
       identificationNumber: documentProofNumber.trim(),
-      outstandingBalance: 0,
-      securityDepositHeld: 0,
-      status: "Active",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      outstandingBalance: editingCustomer?.outstandingBalance || 0,
+      securityDepositHeld: editingCustomer?.securityDepositHeld || 0,
+      status: editingCustomer?.status || "Active",
+      createdAt: editingCustomer?.createdAt || now,
+      updatedAt: now
     };
     setSaving(true);
     try {
       if (firebaseConfigured) await saveCustomer(next);
-      setRows([next, ...rows]);
-      setMessage(firebaseConfigured ? "Customer saved to Firebase and is available in Bookings." : "Customer added in this session.");
-      setName("New Customer");
-      setMobile("+91 ");
-      setAddress("Aizawl");
-      setLandmark("");
-      setDocumentType("Aadhaar");
-      setDocumentProofNumber("");
+      setRows((currentRows) =>
+        editingCustomer
+          ? currentRows.map((customer) => (customer.id === next.id ? next : customer))
+          : [next, ...currentRows]
+      );
+      setMessage(
+        editingCustomer
+          ? "Customer updated."
+          : firebaseConfigured
+            ? "Customer saved to Firebase and is available in Bookings."
+            : "Customer added in this session."
+      );
+      resetCustomerForm();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not save customer.");
     } finally {
@@ -1342,7 +1388,14 @@ export function CustomersPage() {
       <SectionHeader eyebrow="Customers" title="Customer management" description="Profiles include contact details, identification, active rentals, balances, deposit held, restrictions, and sensitive-ID visibility controls." />
       <div className="grid gap-6 xl:grid-cols-[0.7fr_1.3fr]">
         <form onSubmit={addCustomer} className="rounded-lg border border-forest/10 bg-white p-5 shadow-soft">
-          <h2 className="text-xl font-bold text-forest">Add customer</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-xl font-bold text-forest">{editingCustomerId ? "Edit customer" : "Add customer"}</h2>
+            {editingCustomerId && (
+              <button type="button" onClick={resetCustomerForm} className="rounded-md border border-forest/20 px-3 py-1 text-sm font-bold text-forest">
+                Cancel edit
+              </button>
+            )}
+          </div>
           <div className="mt-4 grid gap-4">
             <TextField label="Full name" value={name} onChange={setName} required />
             <TextField label="Mobile number" value={mobile} onChange={setMobile} required />
@@ -1353,12 +1406,12 @@ export function CustomersPage() {
             {message && <p className="rounded-md bg-emerald-50 p-3 text-sm font-semibold text-emerald-900">{message}</p>}
             {error && <p className="rounded-md bg-red-50 p-3 text-sm font-semibold text-red-800">{error}</p>}
             <button disabled={saving} className="rounded-md bg-forest px-4 py-2 font-bold text-cream hover:bg-leaf disabled:cursor-not-allowed disabled:bg-stone-300">
-              {saving ? "Saving..." : "Create customer"}
+              {saving ? "Saving..." : editingCustomerId ? "Update customer" : "Create customer"}
             </button>
           </div>
         </form>
         <ResponsiveTable
-          headers={["Customer", "Mobile", "Address", "Landmark", "Document", "Balance", "Deposit", "Status"]}
+          headers={["Customer", "Mobile", "Address", "Landmark", "Document", "Balance", "Deposit", "Status", "Actions"]}
           rows={rows.map((customer) => [
             `${customer.customerId} - ${customer.fullName}`,
             customer.mobile,
@@ -1367,7 +1420,15 @@ export function CustomersPage() {
             `${customer.identificationType}: ${customer.identificationNumber}`,
             formatCurrency(customer.outstandingBalance),
             formatCurrency(customer.securityDepositHeld),
-            <StatusBadge key={customer.id} status={customer.status} />
+            <StatusBadge key={customer.id} status={customer.status} />,
+            <div key={`${customer.id}-actions`} className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => editCustomer(customer)} className="rounded-md border border-forest/10 p-2 text-forest" title="Edit customer">
+                <Pencil className="h-4 w-4" />
+              </button>
+              <button type="button" onClick={() => deleteCustomerRecord(customer)} className="rounded-md border border-red-200 p-2 text-red-700" title="Remove customer">
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
           ])}
         />
       </div>

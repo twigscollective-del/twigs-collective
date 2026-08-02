@@ -68,12 +68,21 @@ export async function listPublicInventoryItems(fallback: InventoryItem[]) {
 }
 
 export async function listCustomers(fallback: Customer[]) {
-  return listCollection<Customer>("customers", fallback);
+  const rows = await listCollection<Customer>("customers", fallback);
+  return rows.filter((customer) => customer.status !== "Inactive");
 }
 
 export async function saveCustomer(customer: Customer) {
   if (!db) throw new Error("Firebase is not configured.");
   await setDoc(doc(db, "customers", customer.id), cleanObject({ ...customer }), { merge: true });
+}
+
+export async function deleteCustomer(customerId: string) {
+  if (!db) throw new Error("Firebase is not configured.");
+  await updateDoc(doc(db, "customers", customerId), {
+    status: "Inactive",
+    updatedAt: serverTimestamp()
+  });
 }
 
 export async function listBookings(fallback: Booking[]) {
