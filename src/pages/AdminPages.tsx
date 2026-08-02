@@ -315,8 +315,8 @@ export function InventoryPage() {
     const code = categories.find((entry) => entry.name === category)?.code || "GEN";
     const now = Date.now();
     const mediaOwnerId = editingId || `inv-local-${now}`;
-    const pastedImageUrls = [imageUrl1, imageUrl2, imageUrl3].map(normalizeMediaUrl).filter(Boolean);
-    const pastedShortVideoUrl = normalizeMediaUrl(shortVideoUrlInput);
+    const pastedImageUrls = [imageUrl1, imageUrl2, imageUrl3].map((url) => normalizeMediaUrl(url, "image")).filter(Boolean);
+    const pastedShortVideoUrl = normalizeMediaUrl(shortVideoUrlInput, "video");
 
     setSavingInventory(true);
     try {

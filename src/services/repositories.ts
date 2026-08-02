@@ -29,6 +29,7 @@ import type {
 import { db } from "./firebase";
 import { storage } from "./firebase";
 import { findAvailabilityConflicts } from "../utils/availability";
+import { normalizeInventoryItemMedia } from "../utils/media";
 
 type FirestoreEntry = { id: string; data: () => Record<string, unknown> };
 
@@ -47,11 +48,12 @@ export async function listCollection<T>(collectionName: string, fallback: T[]) {
 }
 
 export async function listInventoryItems(fallback: InventoryItem[]) {
-  return listCollection<InventoryItem>("inventoryItems", fallback);
+  const rows = await listCollection<InventoryItem>("inventoryItems", fallback);
+  return rows.map(normalizeInventoryItemMedia);
 }
 
 export async function listPublicInventoryItems(fallback: InventoryItem[]) {
-  if (!db) return fallback;
+  if (!db) return fallback.map(normalizeInventoryItemMedia);
   const snap = await getDocs(
     query(
       collection(db, "inventoryItems"),
@@ -61,7 +63,7 @@ export async function listPublicInventoryItems(fallback: InventoryItem[]) {
     )
   );
   const rows = snap.docs.map((entry: FirestoreEntry) => ({ id: entry.id, ...entry.data() })) as InventoryItem[];
-  return rows.length ? rows : fallback;
+  return (rows.length ? rows : fallback).map(normalizeInventoryItemMedia);
 }
 
 export async function saveBookingRequest(payload: Omit<Booking, "id" | "createdAt" | "updatedAt">) {
@@ -315,13 +317,13 @@ export async function uploadInventoryMedia(
 
 export async function saveInventoryItem(item: InventoryItem) {
   if (!db) throw new Error("Firebase is not configured.");
-  const safeItem = {
+  const safeItem = normalizeInventoryItemMedia({
     ...item,
     images: item.images.filter((url) => !url.startsWith("blob:") && !url.startsWith("data:")),
     featuredImage: item.featuredImage.startsWith("blob:") || item.featuredImage.startsWith("data:") ? "" : item.featuredImage,
     shortVideo: item.shortVideo?.startsWith("blob:") || item.shortVideo?.startsWith("data:") ? undefined : item.shortVideo
-  };
-  await setDoc(doc(db, "inventoryItems", item.id), cleanObject(safeItem), { merge: true });
+  });
+  await setDoc(doc(db, "inventoryItems", item.id), cleanObject({ ...safeItem }), { merge: true });
 }
 
 export async function latestAuditLogs() {
