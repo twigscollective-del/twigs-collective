@@ -247,6 +247,9 @@ export function InventoryPage() {
   const [itemCount, setItemCount] = useState("1");
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [imageCropMode, setImageCropMode] = useState("Crop 4:5");
+  const [imageResizeSize, setImageResizeSize] = useState("900");
+  const [processingImages, setProcessingImages] = useState(false);
   const [shortVideoFile, setShortVideoFile] = useState<File | null>(null);
   const [shortVideoPreview, setShortVideoPreview] = useState("");
   const [existingImages, setExistingImages] = useState<string[]>([]);
@@ -425,9 +428,18 @@ export function InventoryPage() {
     if (!files) return;
     imagePreviews.forEach((url) => URL.revokeObjectURL(url));
     setInventoryError("");
+    setInventoryMessage("");
     const selectedFiles = Array.from(files).slice(0, 6);
+    setProcessingImages(true);
     try {
-      const compressedFiles = await Promise.all(selectedFiles.map((file) => compressImageFile(file)));
+      const compressedFiles = await Promise.all(
+        selectedFiles.map((file) =>
+          compressImageFile(file, {
+            maxSide: Number(imageResizeSize) || 900,
+            mode: imageCropMode
+          })
+        )
+      );
       const largeFile = compressedFiles.find((file) => file.size > 1.5 * 1024 * 1024);
       if (largeFile) {
         setInventoryError("One image is still larger than 1.5 MB after compression. Please choose a smaller image.");
@@ -437,11 +449,14 @@ export function InventoryPage() {
       }
       setImageFiles(compressedFiles);
       setImagePreviews(compressedFiles.map((file) => URL.createObjectURL(file)));
-      setInventoryMessage(`Compressed ${compressedFiles.length} image${compressedFiles.length === 1 ? "" : "s"} for upload.`);
+      const totalSize = compressedFiles.reduce((sum, file) => sum + file.size, 0) / (1024 * 1024);
+      setInventoryMessage(`Processed ${compressedFiles.length} image${compressedFiles.length === 1 ? "" : "s"} for upload (${totalSize.toFixed(1)} MB total).`);
     } catch (error) {
       setInventoryError(error instanceof Error ? error.message : "Could not compress selected images.");
       setImageFiles([]);
       setImagePreviews([]);
+    } finally {
+      setProcessingImages(false);
     }
   }
 
@@ -706,17 +721,33 @@ export function InventoryPage() {
               </p>
             )}
             <TextAreaField label="Remarks" value={remarks} onChange={setRemarks} placeholder="Condition notes, fitting notes, accessories, or special handling." />
+            <div className="grid gap-4 rounded-md border border-forest/10 bg-cream p-3 sm:grid-cols-2">
+              <SelectField
+                label="Image crop"
+                value={imageCropMode}
+                onChange={setImageCropMode}
+                options={["Crop 4:5", "Square crop", "Fit full image"]}
+              />
+              <SelectField
+                label="Image size"
+                value={imageResizeSize}
+                onChange={setImageResizeSize}
+                options={["700", "900", "1200", "1400"]}
+              />
+            </div>
             <label className="grid gap-1.5 text-sm font-semibold text-charcoal">
               Dress photographs
-              <span className="text-xs font-semibold text-charcoal/55">Up to 6 images. Images are compressed before upload.</span>
+              <span className="text-xs font-semibold text-charcoal/55">Up to 6 images. Images are resized and cropped before upload.</span>
               <input
                 className="rounded-md border border-forest/15 bg-white px-3 py-2 text-charcoal file:mr-3 file:rounded-md file:border-0 file:bg-forest file:px-3 file:py-2 file:font-bold file:text-cream"
                 type="file"
                 accept="image/*"
                 multiple
+                disabled={processingImages}
                 onChange={(event) => selectImages(event.target.files)}
               />
             </label>
+            {processingImages && <p className="rounded-md bg-amber-50 p-3 text-sm font-semibold text-amber-900">Resizing and cropping images...</p>}
             {imagePreviews.length > 0 && (
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.12em] text-charcoal/45">
@@ -754,8 +785,8 @@ export function InventoryPage() {
             )}
             {inventoryMessage && <p className="rounded-md bg-emerald-50 p-3 text-sm font-semibold text-emerald-900">{inventoryMessage}</p>}
             {inventoryError && <p className="rounded-md bg-red-50 p-3 text-sm font-semibold text-red-800">{inventoryError}</p>}
-            <button disabled={savingInventory} className="inline-flex items-center justify-center gap-2 rounded-md bg-forest px-4 py-2 font-bold text-cream hover:bg-leaf disabled:cursor-not-allowed disabled:bg-stone-300">
-              <Plus className="h-4 w-4" /> {savingInventory ? "Saving..." : editingId ? "Update item" : "Add sample item"}
+            <button disabled={savingInventory || processingImages} className="inline-flex items-center justify-center gap-2 rounded-md bg-forest px-4 py-2 font-bold text-cream hover:bg-leaf disabled:cursor-not-allowed disabled:bg-stone-300">
+              <Plus className="h-4 w-4" /> {savingInventory ? "Saving..." : processingImages ? "Processing images..." : editingId ? "Update item" : "Add sample item"}
             </button>
             <div className="rounded-lg border border-dashed border-forest/20 bg-cream p-4">
               <h3 className="font-bold text-forest">Bulk add items</h3>
@@ -967,7 +998,18 @@ function rowValue(row: Record<string, string>, ...keys: string[]) {
   return "";
 }
 
-async function compressImageFile(file: File, maxSide = 1400, quality = 0.78): Promise<File> {
+async function compressImageFile(
+  file: File,
+  {
+    maxSide = 900,
+    mode = "Crop 4:5",
+    quality = 0.72
+  }: {
+    maxSide?: number;
+    mode?: string;
+    quality?: number;
+  } = {}
+): Promise<File> {
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const element = new Image();
@@ -982,13 +1024,37 @@ async function compressImageFile(file: File, maxSide = 1400, quality = 0.78): Pr
     element.src = url;
   });
 
-  const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+  let sourceX = 0;
+  let sourceY = 0;
+  let sourceWidth = image.width;
+  let sourceHeight = image.height;
+  let outputWidth = 0;
+  let outputHeight = 0;
+
+  if (mode === "Crop 4:5" || mode === "Square crop") {
+    const targetAspect = mode === "Square crop" ? 1 : 4 / 5;
+    const sourceAspect = image.width / image.height;
+    if (sourceAspect > targetAspect) {
+      sourceWidth = image.height * targetAspect;
+      sourceX = (image.width - sourceWidth) / 2;
+    } else {
+      sourceHeight = image.width / targetAspect;
+      sourceY = (image.height - sourceHeight) / 2;
+    }
+    outputHeight = mode === "Square crop" ? maxSide : maxSide;
+    outputWidth = Math.round(outputHeight * targetAspect);
+  } else {
+    const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+    outputWidth = Math.max(1, Math.round(image.width * scale));
+    outputHeight = Math.max(1, Math.round(image.height * scale));
+  }
+
   const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.round(image.width * scale));
-  canvas.height = Math.max(1, Math.round(image.height * scale));
+  canvas.width = Math.max(1, outputWidth);
+  canvas.height = Math.max(1, outputHeight);
   const context = canvas.getContext("2d");
   if (!context) throw new Error("Image compression is not supported in this browser.");
-  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
 
   const blob = await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((nextBlob) => {
