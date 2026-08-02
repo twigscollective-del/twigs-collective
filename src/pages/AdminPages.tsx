@@ -1217,7 +1217,10 @@ export function CustomersPage() {
   const [rows, setRows] = useSyncedCustomers();
   const [name, setName] = useState("New Customer");
   const [mobile, setMobile] = useState("+91 ");
-  const [town, setTown] = useState("Aizawl");
+  const [address, setAddress] = useState("Aizawl");
+  const [landmark, setLandmark] = useState("");
+  const [documentType, setDocumentType] = useState("Aadhaar");
+  const [documentProofNumber, setDocumentProofNumber] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -1230,13 +1233,25 @@ export function CustomersPage() {
       setError("Enter a valid mobile number.");
       return;
     }
+    if (!address.trim()) {
+      setError("Enter the customer address.");
+      return;
+    }
+    if (!documentProofNumber.trim()) {
+      setError("Enter the document proof number.");
+      return;
+    }
     const next: Customer = {
       ...customers[0],
       id: `cust-local-${Date.now()}`,
       customerId: `TC-CUS-${String(rows.length + 1).padStart(3, "0")}`,
       fullName: name,
       mobile,
-      town,
+      address: address.trim(),
+      town: address.trim(),
+      landmark: landmark.trim() || undefined,
+      identificationType: documentType,
+      identificationNumber: documentProofNumber.trim(),
       outstandingBalance: 0,
       securityDepositHeld: 0,
       status: "Active",
@@ -1250,7 +1265,10 @@ export function CustomersPage() {
       setMessage(firebaseConfigured ? "Customer saved to Firebase and is available in Bookings." : "Customer added in this session.");
       setName("New Customer");
       setMobile("+91 ");
-      setTown("Aizawl");
+      setAddress("Aizawl");
+      setLandmark("");
+      setDocumentType("Aadhaar");
+      setDocumentProofNumber("");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not save customer.");
     } finally {
@@ -1267,7 +1285,10 @@ export function CustomersPage() {
           <div className="mt-4 grid gap-4">
             <TextField label="Full name" value={name} onChange={setName} required />
             <TextField label="Mobile number" value={mobile} onChange={setMobile} required />
-            <TextField label="Town/locality" value={town} onChange={setTown} required />
+            <TextField label="Address" value={address} onChange={setAddress} required />
+            <TextField label="Landmark" value={landmark} onChange={setLandmark} placeholder="Near..." />
+            <SelectField label="Document Type" value={documentType} onChange={setDocumentType} options={["Aadhaar", "Voter ID", "Driving License", "Passport", "Other"]} />
+            <TextField label="Document Proof number" value={documentProofNumber} onChange={setDocumentProofNumber} required />
             {message && <p className="rounded-md bg-emerald-50 p-3 text-sm font-semibold text-emerald-900">{message}</p>}
             {error && <p className="rounded-md bg-red-50 p-3 text-sm font-semibold text-red-800">{error}</p>}
             <button disabled={saving} className="rounded-md bg-forest px-4 py-2 font-bold text-cream hover:bg-leaf disabled:cursor-not-allowed disabled:bg-stone-300">
@@ -1276,11 +1297,13 @@ export function CustomersPage() {
           </div>
         </form>
         <ResponsiveTable
-          headers={["Customer", "Mobile", "Town", "Balance", "Deposit", "Status"]}
+          headers={["Customer", "Mobile", "Address", "Landmark", "Document", "Balance", "Deposit", "Status"]}
           rows={rows.map((customer) => [
             `${customer.customerId} - ${customer.fullName}`,
             customer.mobile,
-            customer.town,
+            customer.address || customer.town,
+            customer.landmark || "-",
+            `${customer.identificationType}: ${customer.identificationNumber}`,
             formatCurrency(customer.outstandingBalance),
             formatCurrency(customer.securityDepositHeld),
             <StatusBadge key={customer.id} status={customer.status} />

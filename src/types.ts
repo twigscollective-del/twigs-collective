@@ -143,6 +143,7 @@ export interface Customer {
   town: string;
   identificationType: string;
   identificationNumber: string;
+  landmark?: string;
   dateOfBirth?: string;
   guardianName?: string;
   guardianPhone?: string;
