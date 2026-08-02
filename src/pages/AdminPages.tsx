@@ -88,6 +88,7 @@ import type {
 } from "../types";
 import { findAvailabilityConflicts } from "../utils/availability";
 import { bookingTotals, collectionSummary, formatCurrency } from "../utils/calculations";
+import { fallbackDressImage, normalizeMediaUrl } from "../utils/media";
 import { can, roleLabel } from "../utils/permissions";
 
 const today = "2026-07-23";
@@ -314,8 +315,8 @@ export function InventoryPage() {
     const code = categories.find((entry) => entry.name === category)?.code || "GEN";
     const now = Date.now();
     const mediaOwnerId = editingId || `inv-local-${now}`;
-    const pastedImageUrls = [imageUrl1, imageUrl2, imageUrl3].map((url) => url.trim()).filter(Boolean);
-    const pastedShortVideoUrl = shortVideoUrlInput.trim();
+    const pastedImageUrls = [imageUrl1, imageUrl2, imageUrl3].map(normalizeMediaUrl).filter(Boolean);
+    const pastedShortVideoUrl = normalizeMediaUrl(shortVideoUrlInput);
 
     setSavingInventory(true);
     try {
@@ -345,7 +346,7 @@ export function InventoryPage() {
       }
 
       const nextImages = pastedImageUrls.length ? pastedImageUrls : uploadedImages.length ? uploadedImages : existingImages;
-      const nextFeaturedImage = nextImages[0] || items[0].featuredImage;
+      const nextFeaturedImage = nextImages[0] || items[0]?.featuredImage || fallbackDressImage;
       const nextShortVideo = pastedShortVideoUrl || uploadedVideos[0] || existingShortVideo || undefined;
       const mediaHelp = mediaWarning ? " Enable Firebase Storage in the Firebase Console, then deploy storage rules." : "";
 
@@ -403,7 +404,7 @@ export function InventoryPage() {
         remarks,
         rentalPrice: Number(price),
         securityDeposit: Number(securityDeposit),
-        images: nextImages.length ? nextImages : items[0].images,
+        images: nextImages.length ? nextImages : items[0]?.images || [fallbackDressImage],
         featuredImage: nextFeaturedImage,
         shortVideo: nextShortVideo,
         publicVisible: true,
@@ -753,7 +754,7 @@ export function InventoryPage() {
             <div className="grid gap-4 rounded-md border border-forest/10 bg-white p-3">
               <p className="text-sm font-bold text-forest">Media URLs</p>
               <p className="text-xs font-semibold text-charcoal/55">
-                Paste public image/video links here to save media without Firebase Storage.
+                Paste direct public image/video links. Google Drive share links are converted automatically when possible.
               </p>
               <TextField label="Image URL 1" value={imageUrl1} onChange={setImageUrl1} placeholder="https://..." />
               <TextField label="Image URL 2" value={imageUrl2} onChange={setImageUrl2} placeholder="https://..." />

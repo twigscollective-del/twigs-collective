@@ -22,6 +22,7 @@ import { bookings, categories, inventoryItems, settings } from "../data/sampleDa
 import { listPublicInventoryItems } from "../services/repositories";
 import { publicAvailability, similarAvailableItems } from "../utils/availability";
 import { formatCurrency } from "../utils/calculations";
+import { fallbackDressImage } from "../utils/media";
 
 function usePublicInventoryItems() {
   const [items, setItems] = useState(inventoryItems);
@@ -77,9 +78,12 @@ export function HomePage() {
             {featured.map((item, index) => (
               <img
                 key={item.id}
-                src={item.featuredImage}
+                src={item.featuredImage || fallbackDressImage}
                 alt={item.name}
                 className={`h-full min-h-64 rounded-lg object-cover shadow-soft ${index === 0 ? "col-span-2 aspect-[16/9]" : "aspect-[4/5]"}`}
+                onError={(event) => {
+                  event.currentTarget.src = fallbackDressImage;
+                }}
               />
             ))}
           </div>
@@ -236,10 +240,10 @@ export function DressDetailsPage() {
     <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
       <div className="grid gap-8 lg:grid-cols-[0.95fr_1fr]">
         <div className="grid gap-4">
-          <img src={item.featuredImage} alt={item.name} className="aspect-[4/5] w-full rounded-lg object-cover shadow-soft" />
+          <img src={item.featuredImage || fallbackDressImage} alt={item.name} className="aspect-[4/5] w-full rounded-lg object-cover shadow-soft" onError={(event) => { event.currentTarget.src = fallbackDressImage; }} />
           <div className="grid grid-cols-3 gap-3">
             {item.images.map((imageUrl) => (
-              <img key={imageUrl} src={imageUrl} alt={`${item.name} view`} className="aspect-square rounded-md object-cover" />
+              <img key={imageUrl} src={imageUrl || fallbackDressImage} alt={`${item.name} view`} className="aspect-square rounded-md object-cover" onError={(event) => { event.currentTarget.src = fallbackDressImage; }} />
             ))}
           </div>
           {item.shortVideo && (
@@ -340,7 +344,7 @@ export function BookingRequestPage() {
   return (
     <section className="mx-auto grid max-w-6xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[0.8fr_1fr] lg:px-8">
       <div className="rounded-lg border border-forest/10 bg-white p-5 shadow-soft">
-        <img src={initialItem.featuredImage} alt={initialItem.name} className="aspect-[4/5] w-full rounded-md object-cover" />
+        <img src={initialItem.featuredImage || fallbackDressImage} alt={initialItem.name} className="aspect-[4/5] w-full rounded-md object-cover" onError={(event) => { event.currentTarget.src = fallbackDressImage; }} />
         <h1 className="mt-5 text-2xl font-bold text-forest">{initialItem.name}</h1>
         <p className="mt-2 text-charcoal/70">{initialItem.dressId} - {initialItem.category}</p>
         <div className="mt-4 flex items-center justify-between">

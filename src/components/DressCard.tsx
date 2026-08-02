@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import type { Booking, InventoryItem } from "../types";
 import { publicAvailability } from "../utils/availability";
 import { formatCurrency } from "../utils/calculations";
+import { fallbackDressImage } from "../utils/media";
 import { StatusBadge } from "./StatusBadge";
 
 export function DressCard({ item, bookings }: { item: InventoryItem; bookings: Booking[] }) {
@@ -15,10 +16,13 @@ export function DressCard({ item, bookings }: { item: InventoryItem; bookings: B
       <div className="relative aspect-[4/5] overflow-hidden bg-stone-100">
         {mediaPage === "photo" ? (
           <img
-            src={item.featuredImage}
+            src={item.featuredImage || fallbackDressImage}
             alt={item.name}
             className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
             loading="lazy"
+            onError={(event) => {
+              event.currentTarget.src = fallbackDressImage;
+            }}
           />
         ) : item.shortVideo ? (
           <video
