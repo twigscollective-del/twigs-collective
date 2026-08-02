@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { AdminShell, PublicShell } from "./components/AppShell";
 import { useAuth } from "./context/AuthContext";
@@ -32,42 +33,57 @@ import {
 
 export default function App() {
   return (
-    <Routes>
-      <Route element={<PublicShell />}>
-        <Route index element={<HomePage />} />
-        <Route path="browse" element={<BrowseDressesPage />} />
-        <Route path="categories" element={<CategoriesPage />} />
-        <Route path="dresses/:id" element={<DressDetailsPage />} />
-        <Route path="booking-request" element={<BookingRequestPage />} />
-        <Route path="rules" element={<RulesPage />} />
-        <Route path="about" element={<AboutPage />} />
-        <Route path="contact" element={<ContactPage />} />
-        <Route path="login" element={<LoginPage />} />
-        <Route path="customer-bookings" element={<CustomerBookingsPage />} />
-      </Route>
-
-      <Route element={<ProtectedStaffRoute />}>
-        <Route element={<AdminShell />}>
-        <Route path="dashboard" element={<DashboardPage />} />
-        <Route path="inventory" element={<InventoryPage />} />
-        <Route path="customers" element={<CustomersPage />} />
-        <Route path="bookings" element={<BookingsPage />} />
-        <Route path="pickup" element={<PickupPage />} />
-        <Route path="returns" element={<ReturnsPage />} />
-        <Route path="payments" element={<PaymentsPage />} />
-        <Route path="deposits" element={<DepositsPage />} />
-        <Route path="maintenance" element={<MaintenancePage />} />
-        <Route path="expenses" element={<ExpensesPage />} />
-        <Route path="reports" element={<ReportsPage />} />
-        <Route path="staff" element={<StaffRolesPage />} />
-        <Route path="settings" element={<SettingsPage />} />
-        <Route path="audit-logs" element={<AuditLogsPage />} />
+    <>
+      <ScrollToTop />
+      <Routes>
+        <Route element={<PublicShell />}>
+          <Route index element={<HomePage />} />
+          <Route path="browse" element={<BrowseDressesPage />} />
+          <Route path="categories" element={<CategoriesPage />} />
+          <Route path="dresses/:id" element={<DressDetailsPage />} />
+          <Route path="booking-request" element={<BookingRequestPage />} />
+          <Route path="rules" element={<RulesPage />} />
+          <Route path="about" element={<AboutPage />} />
+          <Route path="contact" element={<ContactPage />} />
+          <Route path="login" element={<LoginPage />} />
+          <Route path="customer-bookings" element={<CustomerBookingsPage />} />
         </Route>
-      </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        <Route element={<ProtectedStaffRoute />}>
+          <Route element={<AdminShell />}>
+            <Route path="dashboard" element={<DashboardPage />} />
+            <Route path="inventory" element={<InventoryPage />} />
+            <Route path="customers" element={<CustomersPage />} />
+            <Route path="bookings" element={<BookingsPage />} />
+            <Route path="pickup" element={<PickupPage />} />
+            <Route path="returns" element={<ReturnsPage />} />
+            <Route path="payments" element={<PaymentsPage />} />
+            <Route path="deposits" element={<DepositsPage />} />
+            <Route path="maintenance" element={<MaintenancePage />} />
+            <Route path="expenses" element={<ExpensesPage />} />
+            <Route path="reports" element={<ReportsPage />} />
+            <Route path="staff" element={<StaffRolesPage />} />
+            <Route path="settings" element={<SettingsPage />} />
+            <Route path="audit-logs" element={<AuditLogsPage />} />
+          </Route>
+        </Route>
+
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </>
   );
+}
+
+function ScrollToTop() {
+  const { pathname, search } = useLocation();
+
+  useEffect(() => {
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    });
+  }, [pathname, search]);
+
+  return null;
 }
 
 function ProtectedStaffRoute() {
