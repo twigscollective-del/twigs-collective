@@ -143,6 +143,15 @@ export function InventoryPage() {
   const [name, setName] = useState("New Stage Costume");
   const [category, setCategory] = useState(categories[0].name);
   const [size, setSize] = useState("M");
+  const [location, setLocation] = useState("Rack A-01");
+  const [ageGroup, setAgeGroup] = useState("Kids");
+  const [gender, setGender] = useState("Female");
+  const [shoulder, setShoulder] = useState("");
+  const [bust, setBust] = useState("");
+  const [waist, setWaist] = useState("");
+  const [hip, setHip] = useState("");
+  const [length, setLength] = useState("");
+  const [remarks, setRemarks] = useState("");
   const [price, setPrice] = useState("500");
   const [imageUrls, setImageUrls] = useState<string[]>([]);
 
@@ -164,6 +173,15 @@ export function InventoryPage() {
       name,
       category,
       size,
+      storageLocation: location,
+      ageGroup,
+      gender: gender as InventoryItem["gender"],
+      shoulder,
+      bust,
+      waist,
+      hip,
+      length,
+      remarks,
       rentalPrice: Number(price),
       images: imageUrls.length ? imageUrls : items[0].images,
       featuredImage: imageUrls[0] || items[0].featuredImage,
@@ -175,6 +193,12 @@ export function InventoryPage() {
     };
     setItems([next, ...items]);
     setImageUrls([]);
+    setShoulder("");
+    setBust("");
+    setWaist("");
+    setHip("");
+    setLength("");
+    setRemarks("");
   }
 
   function selectImages(files: FileList | null) {
@@ -203,8 +227,23 @@ export function InventoryPage() {
           <div className="mt-4 grid gap-4">
             <TextField label="Dress name" value={name} onChange={setName} required />
             <SelectField label="Category" value={category} onChange={setCategory} options={categories.map((entry) => entry.name)} />
-            <TextField label="Size" value={size} onChange={setSize} required />
-            <TextField label="Rental price" value={price} onChange={setPrice} type="number" required />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <TextField label="Size" value={size} onChange={setSize} required />
+              <TextField label="Location" value={location} onChange={setLocation} required />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <SelectField label="Age Group" value={ageGroup} onChange={setAgeGroup} options={["Kids", "Adults"]} />
+              <SelectField label="Gender" value={gender} onChange={setGender} options={["Male", "Female"]} />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <TextField label="Shoulder" value={shoulder} onChange={setShoulder} placeholder="e.g. 14 in" />
+              <TextField label="Bust" value={bust} onChange={setBust} placeholder="e.g. 32 in" />
+              <TextField label="Waist" value={waist} onChange={setWaist} placeholder="e.g. 28 in" />
+              <TextField label="Hip" value={hip} onChange={setHip} placeholder="e.g. 34 in" />
+              <TextField label="Length" value={length} onChange={setLength} placeholder="e.g. 38 in" />
+              <TextField label="Rental price" value={price} onChange={setPrice} type="number" required />
+            </div>
+            <TextAreaField label="Remarks" value={remarks} onChange={setRemarks} placeholder="Condition notes, fitting notes, accessories, or special handling." />
             <label className="grid gap-1.5 text-sm font-semibold text-charcoal">
               Dress photographs
               <input

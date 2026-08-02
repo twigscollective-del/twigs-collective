@@ -17,8 +17,8 @@ export const sampleNotice = "Development sample data - remove before production.
 
 export const settings: ShopSettings = {
   shopName: "Twigs Collective",
-  address: "Mission Veng, Aizawl, Mizoram",
-  phones: ["+91 98625 00000", "+91 98625 11111"],
+  address: "CHANEM Building, Vengthlang, Champhai, Mizoram",
+  phones: ["+919089987109"],
   whatsappNumber: import.meta.env.VITE_SHOP_WHATSAPP_NUMBER || "919862500000",
   email: "hello@twigsrental.example",
   upiId: import.meta.env.VITE_SHOP_UPI_ID || "twigs@upi",
@@ -30,7 +30,7 @@ export const settings: ShopSettings = {
   receiptPrefix: "TRC-RCPT",
   bookingPrefix: "TRC-BKG",
   inventoryPrefix: "TRC",
-  openingHours: "Mon-Sat, 10:00 AM - 7:00 PM",
+  openingHours: "Mon-Fri, 10:00 AM - 5:00 PM",
   terms: [
     "Reservations are confirmed only after staff approval and required advance payment.",
     "Security deposit is refundable after return inspection and settlement.",

@@ -100,6 +100,11 @@ export interface InventoryItem {
   gender: "Female" | "Male" | "Unisex";
   ageGroup: string;
   size: string;
+  shoulder?: string;
+  bust?: string;
+  waist?: string;
+  hip?: string;
+  length?: string;
   colour: string;
   material: string;
   rentalPrice: number;
@@ -114,6 +119,7 @@ export interface InventoryItem {
   accessoriesIncluded: string[];
   cleaningInstructions: string;
   repairNotes?: string;
+  remarks?: string;
   images: string[];
   featuredImage: string;
   publicVisible: boolean;

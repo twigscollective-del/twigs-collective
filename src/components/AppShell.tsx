@@ -110,7 +110,7 @@ export function AdminShell() {
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[17rem_1fr]">
-      <aside className="sticky top-0 z-40 border-b border-forest/10 bg-cream/95 px-4 py-4 backdrop-blur lg:h-screen lg:border-b-0 lg:border-r lg:px-5">
+      <aside className="sticky top-0 z-40 max-h-screen overflow-y-auto border-b border-forest/10 bg-cream/95 px-4 py-4 backdrop-blur lg:h-screen lg:border-b-0 lg:border-r lg:px-5">
         <div className="flex items-center justify-between lg:block">
           <Logo />
           <button
@@ -121,7 +121,7 @@ export function AdminShell() {
             {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
         </div>
-        <nav className={`${open ? "grid" : "hidden"} mt-5 gap-1 lg:grid`}>
+        <nav className={`${open ? "grid" : "hidden"} mt-5 max-h-[calc(100vh-5.5rem)] gap-1 overflow-y-auto pb-24 lg:grid lg:max-h-none lg:pb-0`}>
           {adminLinks.map((link) => (
             <NavLink key={link.to} to={link.to} className={adminNavClass} onClick={() => setOpen(false)}>
               <link.icon className="h-4 w-4" />
