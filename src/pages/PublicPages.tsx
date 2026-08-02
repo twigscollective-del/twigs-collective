@@ -57,7 +57,7 @@ export function HomePage() {
         <div className="mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[1fr_0.9fr] lg:px-8 lg:py-16">
           <div className="flex flex-col justify-center">
             <p className="text-sm font-bold uppercase tracking-[0.2em] text-gold">Dress for Every Occasion</p>
-            <h1 className="mt-4 font-display text-5xl font-bold leading-tight text-forest sm:text-6xl">
+            <h1 className="mt-4 break-words font-display text-4xl font-bold leading-tight text-forest sm:text-6xl">
               Twigs Collective
             </h1>
             <p className="mt-5 max-w-2xl text-lg leading-8 text-charcoal/75">
@@ -76,13 +76,13 @@ export function HomePage() {
               </a>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             {featured.map((item, index) => (
               <img
                 key={item.id}
                 src={item.featuredImage || fallbackDressImage}
                 alt={item.name}
-                className={`h-full min-h-64 rounded-lg object-cover shadow-soft ${index === 0 ? "col-span-2 aspect-[16/9]" : "aspect-[4/5]"}`}
+                className={`h-full min-h-64 rounded-lg object-cover shadow-soft ${index === 0 ? "sm:col-span-2 aspect-[16/9]" : "aspect-[4/5]"}`}
                 onError={(event) => {
                   event.currentTarget.src = fallbackDressImage;
                 }}
@@ -260,7 +260,7 @@ export function DressDetailsPage() {
         </div>
         <div>
           <p className="text-sm font-bold uppercase tracking-[0.18em] text-gold">{item.dressId}</p>
-          <h1 className="mt-2 font-display text-4xl font-bold text-forest">{item.name}</h1>
+          <h1 className="mt-2 break-words font-display text-3xl font-bold text-forest sm:text-4xl">{item.name}</h1>
           <p className="mt-4 text-lg leading-8 text-charcoal/75">{item.description}</p>
           <div className="mt-6 grid gap-4 rounded-lg border border-forest/10 bg-white p-5 shadow-soft sm:grid-cols-2">
             {[
@@ -285,7 +285,7 @@ export function DressDetailsPage() {
               <TextField label="Pickup" type="datetime-local" value={pickup} onChange={setPickup} />
               <TextField label="Return" type="datetime-local" value={returnAt} onChange={setReturnAt} />
             </div>
-            <div className="mt-4 flex items-center justify-between gap-4 rounded-md bg-cream p-3">
+            <div className="mt-4 flex flex-col gap-3 rounded-md bg-cream p-3 sm:flex-row sm:items-center sm:justify-between">
               <span className="font-semibold text-charcoal">Public status</span>
               <StatusBadge status={availability} />
             </div>
@@ -414,14 +414,14 @@ export function ContactPage() {
       <div>
         <SectionHeader eyebrow="Visit us" title="Contact and location" />
         <div className="mt-8 grid gap-4">
-          <p className="flex gap-3 rounded-lg border border-forest/10 bg-white p-5 font-semibold text-charcoal shadow-soft">
-            <MapPin className="h-5 w-5 text-gold" /> {settings.address}
+          <p className="flex min-w-0 gap-3 rounded-lg border border-forest/10 bg-white p-5 font-semibold text-charcoal shadow-soft">
+            <MapPin className="h-5 w-5 shrink-0 text-gold" /> <span className="min-w-0 break-words">{settings.address}</span>
           </p>
-          <p className="flex gap-3 rounded-lg border border-forest/10 bg-white p-5 font-semibold text-charcoal shadow-soft">
-            <Phone className="h-5 w-5 text-gold" /> {settings.phones.join(" / ")}
+          <p className="flex min-w-0 gap-3 rounded-lg border border-forest/10 bg-white p-5 font-semibold text-charcoal shadow-soft">
+            <Phone className="h-5 w-5 shrink-0 text-gold" /> <span className="min-w-0 break-words">{settings.phones.join(" / ")}</span>
           </p>
-          <p className="flex gap-3 rounded-lg border border-forest/10 bg-white p-5 font-semibold text-charcoal shadow-soft">
-            <Clock className="h-5 w-5 text-gold" /> {settings.openingHours}
+          <p className="flex min-w-0 gap-3 rounded-lg border border-forest/10 bg-white p-5 font-semibold text-charcoal shadow-soft">
+            <Clock className="h-5 w-5 shrink-0 text-gold" /> <span className="min-w-0 break-words">{settings.openingHours}</span>
           </p>
         </div>
       </div>

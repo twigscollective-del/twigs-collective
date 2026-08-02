@@ -13,10 +13,15 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+html {
+  overflow-x: hidden;
+}
+
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  overflow-x: hidden;
   background:
     linear-gradient(135deg, rgba(185, 139, 75, 0.11), transparent 36rem),
     linear-gradient(225deg, rgba(31, 111, 74, 0.08), transparent 38rem),

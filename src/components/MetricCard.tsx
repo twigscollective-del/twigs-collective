@@ -22,14 +22,14 @@ export function MetricCard({
   };
 
   return (
-    <section className="rounded-lg border border-forest/10 bg-white p-4 shadow-soft">
+    <section className="min-w-0 rounded-lg border border-forest/10 bg-white p-4 shadow-soft">
       <div className="flex items-start justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           <p className="text-sm font-medium text-charcoal/65">{title}</p>
-          <p className="mt-2 text-2xl font-bold text-charcoal">{value}</p>
+          <p className="mt-2 break-words text-xl font-bold text-charcoal sm:text-2xl">{value}</p>
           {helper && <p className="mt-1 text-xs font-medium text-charcoal/55">{helper}</p>}
         </div>
-        <span className={`grid h-10 w-10 place-items-center rounded-md ${tones[tone]}`}>
+        <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-md ${tones[tone]}`}>
           <Icon className="h-5 w-5" />
         </span>
       </div>

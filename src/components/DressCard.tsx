@@ -57,10 +57,10 @@ export function DressCard({ item, bookings }: { item: InventoryItem; bookings: B
         </div>
       </div>
       <div className="space-y-4 p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-gold">{item.category}</p>
-            <h3 className="mt-1 text-lg font-bold text-charcoal">{item.name}</h3>
+            <h3 className="mt-1 break-words text-lg font-bold text-charcoal">{item.name}</h3>
           </div>
           <StatusBadge status={availability} />
         </div>
@@ -82,7 +82,7 @@ export function DressCard({ item, bookings }: { item: InventoryItem; bookings: B
             <dd>{formatCurrency(item.rentalPrice)}</dd>
           </div>
         </dl>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid gap-2 sm:grid-cols-2">
           <Link
             to={`/dresses/${item.id}`}
             className="inline-flex items-center justify-center gap-2 rounded-md bg-forest px-3 py-2 text-sm font-semibold text-cream transition hover:bg-leaf"
