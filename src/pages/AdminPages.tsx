@@ -41,7 +41,9 @@ import {
   addRefundRecord,
   addRepairRecord,
   listInventoryItems,
+  listCustomers,
   saveInventoryItem,
+  saveCustomer,
   saveShopSettings,
   updateBookingDepositSettlement,
   updateBookingPaymentSummary,
@@ -138,8 +140,29 @@ function useSyncedInventoryItems() {
   return rows;
 }
 
+function useSyncedCustomers() {
+  const [rows, setRows] = useState(customers);
+
+  useEffect(() => {
+    let active = true;
+    listCustomers(customers)
+      .then((customerRows) => {
+        if (active && customerRows.length) setRows(customerRows);
+      })
+      .catch((error: unknown) => {
+        console.warn("Customer sync failed", error);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return [rows, setRows] as const;
+}
+
 export function DashboardPage() {
   const syncedItems = useSyncedInventoryItems();
+  const [syncedCustomers] = useSyncedCustomers();
   const collections = collectionSummary(payments);
   const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
   const monthRevenue = payments.filter((payment) => payment.verificationStatus === "Verified").reduce((sum, payment) => sum + payment.amount, 0);
@@ -169,7 +192,7 @@ export function DashboardPage() {
         <MetricCard title="Repair" value={statusCount("Repair")} icon={Wrench} tone="red" />
         <MetricCard title="Today collected" value={formatCurrency(collections.total)} helper={`Cash ${formatCurrency(collections.cash)} / UPI ${formatCurrency(collections.upi)}`} icon={IndianRupee} tone="blue" />
         <MetricCard title="Pending balances" value={formatCurrency(bookings.reduce((sum, booking) => sum + bookingTotals(booking).balanceDue, 0))} icon={ReceiptText} tone="red" />
-        <MetricCard title="Deposits held" value={formatCurrency(customers.reduce((sum, customer) => sum + customer.securityDepositHeld, 0))} icon={Shield} />
+        <MetricCard title="Deposits held" value={formatCurrency(syncedCustomers.reduce((sum, customer) => sum + customer.securityDepositHeld, 0))} icon={Shield} />
         <MetricCard title="Monthly revenue" value={formatCurrency(monthRevenue)} icon={BadgeIndianRupee} tone="forest" />
         <MetricCard title="Estimated profit" value={formatCurrency(monthRevenue - totalExpenses)} helper={`Expenses ${formatCurrency(totalExpenses)}`} icon={FileText} tone="gold" />
       </div>
@@ -1191,18 +1214,26 @@ function normalizeDressStatus(value: string): DressStatus {
 }
 
 export function CustomersPage() {
-  const [rows, setRows] = useState(customers);
+  const [rows, setRows] = useSyncedCustomers();
   const [name, setName] = useState("New Customer");
   const [mobile, setMobile] = useState("+91 ");
   const [town, setTown] = useState("Aizawl");
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
-  function addCustomer(event: FormEvent) {
+  async function addCustomer(event: FormEvent) {
     event.preventDefault();
-    if (!/^\+?\d[\d\s-]{8,}$/.test(mobile)) return;
+    setMessage("");
+    setError("");
+    if (!/^\+?\d[\d\s-]{8,}$/.test(mobile)) {
+      setError("Enter a valid mobile number.");
+      return;
+    }
     const next: Customer = {
       ...customers[0],
       id: `cust-local-${Date.now()}`,
-      customerId: `TRC-CUS-${String(rows.length + 1).padStart(3, "0")}`,
+      customerId: `TC-CUS-${String(rows.length + 1).padStart(3, "0")}`,
       fullName: name,
       mobile,
       town,
@@ -1212,7 +1243,19 @@ export function CustomersPage() {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
-    setRows([next, ...rows]);
+    setSaving(true);
+    try {
+      if (firebaseConfigured) await saveCustomer(next);
+      setRows([next, ...rows]);
+      setMessage(firebaseConfigured ? "Customer saved to Firebase and is available in Bookings." : "Customer added in this session.");
+      setName("New Customer");
+      setMobile("+91 ");
+      setTown("Aizawl");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not save customer.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -1225,7 +1268,11 @@ export function CustomersPage() {
             <TextField label="Full name" value={name} onChange={setName} required />
             <TextField label="Mobile number" value={mobile} onChange={setMobile} required />
             <TextField label="Town/locality" value={town} onChange={setTown} required />
-            <button className="rounded-md bg-forest px-4 py-2 font-bold text-cream hover:bg-leaf">Create customer</button>
+            {message && <p className="rounded-md bg-emerald-50 p-3 text-sm font-semibold text-emerald-900">{message}</p>}
+            {error && <p className="rounded-md bg-red-50 p-3 text-sm font-semibold text-red-800">{error}</p>}
+            <button disabled={saving} className="rounded-md bg-forest px-4 py-2 font-bold text-cream hover:bg-leaf disabled:cursor-not-allowed disabled:bg-stone-300">
+              {saving ? "Saving..." : "Create customer"}
+            </button>
           </div>
         </form>
         <ResponsiveTable
@@ -1246,6 +1293,8 @@ export function CustomersPage() {
 
 export function BookingsPage() {
   const [bookingRows, setBookingRows] = useState(bookings);
+  const syncedItems = useSyncedInventoryItems();
+  const [customerRows] = useSyncedCustomers();
   const [selectedCustomerId, setSelectedCustomerId] = useState(customers[0].id);
   const [selectedItemId, setSelectedItemId] = useState(inventoryItems[1].id);
   const [bookingSource, setBookingSource] = useState("Walk-in");
@@ -1256,11 +1305,23 @@ export function BookingsPage() {
   const [notes, setNotes] = useState("");
   const [bookingMessage, setBookingMessage] = useState("");
   const [bookingError, setBookingError] = useState("");
-  const item = inventoryItems.find((entry) => entry.id === selectedItemId)!;
-  const customer = customers.find((entry) => entry.id === selectedCustomerId)!;
+  const item = syncedItems.find((entry) => entry.id === selectedItemId) || syncedItems[0];
+  const customer = customerRows.find((entry) => entry.id === selectedCustomerId) || customerRows[0];
   const conflicts = findAvailabilityConflicts(selectedItemId, pickup, returnAt, bookingRows, settings.preparationBufferHours);
   const rentalDays = calculateRentalDays(pickup, returnAt);
   const validDates = new Date(returnAt).getTime() > new Date(pickup).getTime();
+
+  useEffect(() => {
+    if (customerRows.length && !customerRows.some((entry) => entry.id === selectedCustomerId)) {
+      setSelectedCustomerId(customerRows[0].id);
+    }
+  }, [customerRows, selectedCustomerId]);
+
+  useEffect(() => {
+    if (syncedItems.length && !syncedItems.some((entry) => entry.id === selectedItemId)) {
+      setSelectedItemId(syncedItems[0].id);
+    }
+  }, [selectedItemId, syncedItems]);
 
   function createBooking(event: FormEvent) {
     event.preventDefault();
@@ -1269,6 +1330,11 @@ export function BookingsPage() {
 
     if (!validDates) {
       setBookingError("Expected return must be later than pickup.");
+      return;
+    }
+
+    if (!customer || !item) {
+      setBookingError("Select a customer and physical item before creating a booking.");
       return;
     }
 
@@ -1368,11 +1434,11 @@ export function BookingsPage() {
         <form onSubmit={createBooking}>
           <Panel title="New booking">
             <div className="grid gap-4">
-            <SelectField label="Customer" value={selectedCustomerId} onChange={setSelectedCustomerId} options={customers.map((entry) => entry.id)} />
+            <SelectField label="Customer" value={selectedCustomerId} onChange={setSelectedCustomerId} options={customerRows.map((entry) => entry.id)} />
             <p className="rounded-md bg-cream p-3 text-sm font-semibold text-charcoal/70">
               {customer.customerId} - {customer.fullName} - {customer.mobile}
             </p>
-            <SelectField label="Physical item" value={selectedItemId} onChange={setSelectedItemId} options={inventoryItems.map((entry) => entry.id)} />
+            <SelectField label="Physical item" value={selectedItemId} onChange={setSelectedItemId} options={syncedItems.map((entry) => entry.id)} />
             <p className="rounded-md bg-cream p-3 text-sm font-semibold text-charcoal/70">
               {item.dressId} - {item.name} - Rent {formatCurrency(item.rentalPrice)} - Deposit {formatCurrency(item.securityDeposit)}
             </p>

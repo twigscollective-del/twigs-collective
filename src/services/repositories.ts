@@ -17,6 +17,7 @@ import type {
   AuditLog,
   Booking,
   CleaningRecord,
+  Customer,
   DepositStatus,
   Expense,
   InventoryItem,
@@ -64,6 +65,15 @@ export async function listPublicInventoryItems(fallback: InventoryItem[]) {
   );
   const rows = snap.docs.map((entry: FirestoreEntry) => ({ id: entry.id, ...entry.data() })) as InventoryItem[];
   return (rows.length ? rows : fallback).map(normalizeInventoryItemMedia);
+}
+
+export async function listCustomers(fallback: Customer[]) {
+  return listCollection<Customer>("customers", fallback);
+}
+
+export async function saveCustomer(customer: Customer) {
+  if (!db) throw new Error("Firebase is not configured.");
+  await setDoc(doc(db, "customers", customer.id), cleanObject({ ...customer }), { merge: true });
 }
 
 export async function saveBookingRequest(payload: Omit<Booking, "id" | "createdAt" | "updatedAt">) {
