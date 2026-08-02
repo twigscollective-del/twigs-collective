@@ -122,6 +122,7 @@ export interface InventoryItem {
   remarks?: string;
   images: string[];
   featuredImage: string;
+  shortVideo?: string;
   publicVisible: boolean;
   featured: boolean;
   archived: boolean;

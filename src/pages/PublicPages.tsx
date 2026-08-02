@@ -216,6 +216,15 @@ export function DressDetailsPage() {
               <img key={imageUrl} src={imageUrl} alt={`${item.name} view`} className="aspect-square rounded-md object-cover" />
             ))}
           </div>
+          {item.shortVideo && (
+            <video
+              src={item.shortVideo}
+              className="aspect-video w-full rounded-lg bg-black object-contain shadow-soft"
+              controls
+              playsInline
+              preload="metadata"
+            />
+          )}
         </div>
         <div>
           <p className="text-sm font-bold uppercase tracking-[0.18em] text-gold">{item.dressId}</p>
@@ -317,7 +326,7 @@ export function BookingRequestPage() {
         {submitted ? (
           <div className="mt-8 rounded-lg bg-emerald-50 p-5 text-emerald-900">
             <h2 className="text-xl font-bold">Request captured</h2>
-            <p className="mt-2">Sample request TRC-BKG-WEB-DRAFT is ready for staff approval. In production this writes to Firestore.</p>
+            <p className="mt-2">Sample request TC-BKG-WEB-DRAFT is ready for staff approval. In production this writes to Firestore.</p>
           </div>
         ) : (
           <div className="mt-8 grid gap-4">

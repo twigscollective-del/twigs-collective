@@ -7,3 +7,4 @@ firebase-debug.log
 *.local
 vite-dev.log
 vite-dev.err.log
+service-account.json

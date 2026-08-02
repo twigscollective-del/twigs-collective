@@ -27,9 +27,9 @@ export const settings: ShopSettings = {
   preparationBufferHours: 8,
   lateFeePerDay: 100,
   refundApprovalLimit: 1000,
-  receiptPrefix: "TRC-RCPT",
-  bookingPrefix: "TRC-BKG",
-  inventoryPrefix: "TRC",
+  receiptPrefix: "TC-RCPT",
+  bookingPrefix: "TC-BKG",
+  inventoryPrefix: "TC",
   openingHours: "Mon-Fri, 10:00 AM - 5:00 PM",
   terms: [
     "Reservations are confirmed only after staff approval and required advance payment.",

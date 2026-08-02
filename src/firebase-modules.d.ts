@@ -40,6 +40,7 @@ declare module "firebase/firestore" {
   export function collection(db: Firestore, collectionName: string): CollectionReference;
   export function doc(db: Firestore, collectionName: string, id: string): DocumentReference;
   export function addDoc(ref: CollectionReference, data: Record<string, unknown>): Promise<{ id: string }>;
+  export function setDoc(ref: DocumentReference, data: Record<string, unknown>, options?: { merge?: boolean }): Promise<void>;
   export function updateDoc(ref: DocumentReference, data: Record<string, unknown>): Promise<void>;
   export function getDocs(ref: QueryReference | CollectionReference): Promise<QuerySnapshot>;
   export function query(ref: CollectionReference, ...constraints: unknown[]): QueryReference;

@@ -8,14 +8,31 @@ import {
   query,
   runTransaction,
   serverTimestamp,
+  setDoc,
   updateDoc,
   where
 } from "firebase/firestore";
-import type { Booking, InventoryItem, PaymentTransaction } from "../types";
+import type {
+  AuditLog,
+  Booking,
+  CleaningRecord,
+  DepositStatus,
+  Expense,
+  InventoryItem,
+  PaymentStatus,
+  PaymentTransaction,
+  Refund,
+  RepairRecord,
+  ShopSettings
+} from "../types";
 import { db } from "./firebase";
 import { findAvailabilityConflicts } from "../utils/availability";
 
 type FirestoreEntry = { id: string; data: () => Record<string, unknown> };
+
+function cleanObject<T extends Record<string, unknown>>(entry: T) {
+  return Object.fromEntries(Object.entries(entry).filter(([, value]) => value !== undefined));
+}
 
 export async function listCollection<T>(collectionName: string, fallback: T[]) {
   if (!db) return fallback;
@@ -80,10 +97,162 @@ export async function addPaymentTransaction(payment: Omit<PaymentTransaction, "i
     if (!duplicate.empty) throw new Error("This UPI reference number has already been recorded.");
   }
 
+  const cleanPayment = cleanObject(payment);
   const ref = await addDoc(collection(db, "payments"), {
-    ...payment,
+    ...cleanPayment,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
+  });
+  return ref.id;
+}
+
+export async function updatePaymentVerificationStatus(
+  paymentId: string,
+  verificationStatus: PaymentTransaction["verificationStatus"]
+) {
+  if (!db) throw new Error("Firebase is not configured.");
+  await updateDoc(doc(db, "payments", paymentId), {
+    verificationStatus,
+    updatedAt: serverTimestamp()
+  });
+}
+
+export async function updateBookingPaymentSummary(
+  bookingId: string,
+  totalReceived: number,
+  paymentStatus: PaymentStatus
+) {
+  if (!db) throw new Error("Firebase is not configured.");
+  await updateDoc(doc(db, "bookings", bookingId), {
+    totalReceived,
+    paymentStatus,
+    updatedAt: serverTimestamp()
+  });
+}
+
+export async function updateBookingDepositSettlement(
+  bookingId: string,
+  settlement: {
+    lateFees: number;
+    cleaningCharges: number;
+    damageCharges: number;
+    missingItemCharges: number;
+    refundableAmount: number;
+    depositStatus: DepositStatus;
+  }
+) {
+  if (!db) throw new Error("Firebase is not configured.");
+  await updateDoc(doc(db, "bookings", bookingId), {
+    ...settlement,
+    updatedAt: serverTimestamp()
+  });
+}
+
+export async function addRefundRecord(refund: Omit<Refund, "id">) {
+  if (!db) throw new Error("Firebase is not configured.");
+  const cleanRefund = cleanObject(refund);
+  const ref = await addDoc(collection(db, "refunds"), {
+    ...cleanRefund,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  });
+  return ref.id;
+}
+
+export async function updateRefundStatus(refundId: string, status: Refund["status"], approvedBy?: string) {
+  if (!db) throw new Error("Firebase is not configured.");
+  const payload = Object.fromEntries(
+    Object.entries({
+      status,
+      approvedBy,
+      refundDate: status === "Paid" ? new Date().toISOString() : undefined,
+      updatedAt: serverTimestamp()
+    }).filter(([, value]) => value !== undefined)
+  );
+  await updateDoc(doc(db, "refunds", refundId), payload);
+}
+
+export async function updateBookingReturnInspection(
+  bookingId: string,
+  payload: Pick<Booking, "bookingStatus" | "actualReturnDateTime" | "lateFees" | "cleaningCharges" | "damageCharges" | "missingItemCharges" | "refundableAmount" | "internalNotes">
+) {
+  if (!db) throw new Error("Firebase is not configured.");
+  await updateDoc(doc(db, "bookings", bookingId), {
+    ...payload,
+    updatedAt: serverTimestamp()
+  });
+}
+
+export async function addCleaningRecord(record: Omit<CleaningRecord, "id">) {
+  if (!db) throw new Error("Firebase is not configured.");
+  const ref = await addDoc(collection(db, "cleaningRecords"), {
+    ...cleanObject(record),
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  });
+  return ref.id;
+}
+
+export async function addRepairRecord(record: Omit<RepairRecord, "id">) {
+  if (!db) throw new Error("Firebase is not configured.");
+  const ref = await addDoc(collection(db, "repairRecords"), {
+    ...cleanObject(record),
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  });
+  return ref.id;
+}
+
+export async function updateCleaningRecordStatus(recordId: string, status: CleaningRecord["status"]) {
+  if (!db) throw new Error("Firebase is not configured.");
+  await updateDoc(doc(db, "cleaningRecords", recordId), {
+    status,
+    actualCompletionDate: status === "Completed" ? new Date().toISOString().slice(0, 10) : undefined,
+    updatedAt: serverTimestamp()
+  });
+}
+
+export async function updateRepairRecordStatus(recordId: string, status: RepairRecord["status"], actualCost?: number) {
+  if (!db) throw new Error("Firebase is not configured.");
+  await updateDoc(doc(db, "repairRecords", recordId), cleanObject({
+    status,
+    actualCost,
+    actualCompletionDate: status === "Completed" ? new Date().toISOString().slice(0, 10) : undefined,
+    updatedAt: serverTimestamp()
+  }));
+}
+
+export async function addExpenseRecord(expense: Omit<Expense, "id">) {
+  if (!db) throw new Error("Firebase is not configured.");
+  const ref = await addDoc(collection(db, "expenses"), {
+    ...cleanObject(expense),
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  });
+  return ref.id;
+}
+
+export async function updateExpenseApproval(expenseId: string, approvedBy: string) {
+  if (!db) throw new Error("Firebase is not configured.");
+  await updateDoc(doc(db, "expenses", expenseId), {
+    approvedBy,
+    updatedAt: serverTimestamp()
+  });
+}
+
+export async function saveShopSettings(settings: ShopSettings) {
+  if (!db) throw new Error("Firebase is not configured.");
+  await setDoc(doc(db, "settings", "shop"), {
+    ...settings,
+    updatedAt: serverTimestamp()
+  }, { merge: true });
+}
+
+export async function addAuditLogRecord(log: Omit<AuditLog, "id">) {
+  if (!db) throw new Error("Firebase is not configured.");
+  const ref = await addDoc(collection(db, "auditLogs"), {
+    ...cleanObject(log),
+    createdAt: serverTimestamp()
   });
   return ref.id;
 }
