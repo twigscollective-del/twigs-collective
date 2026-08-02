@@ -11,7 +11,7 @@ import {
   ShoppingBag,
   Sparkles
 } from "lucide-react";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { DressCard } from "../components/DressCard";
 import { SelectField, TextAreaField, TextField } from "../components/FormControls";
@@ -19,15 +19,34 @@ import { SectionHeader } from "../components/SectionHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { useAuth } from "../context/AuthContext";
 import { bookings, categories, inventoryItems, settings } from "../data/sampleData";
+import { listPublicInventoryItems } from "../services/repositories";
 import { publicAvailability, similarAvailableItems } from "../utils/availability";
 import { formatCurrency } from "../utils/calculations";
 
-const sizes = ["All", ...Array.from(new Set(inventoryItems.map((item) => item.size)))];
-const ageGroups = ["All", ...Array.from(new Set(inventoryItems.map((item) => item.ageGroup)))];
-const colours = ["All", ...Array.from(new Set(inventoryItems.map((item) => item.colour)))];
+function usePublicInventoryItems() {
+  const [items, setItems] = useState(inventoryItems);
+
+  useEffect(() => {
+    let active = true;
+    listPublicInventoryItems(inventoryItems)
+      .then((rows) => {
+        if (active && rows.length) setItems(rows);
+      })
+      .catch((error: unknown) => {
+        console.warn("Public inventory sync failed", error);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return items;
+}
 
 export function HomePage() {
-  const featured = inventoryItems.filter((item) => item.featured && item.publicVisible).slice(0, 3);
+  const syncedItems = usePublicInventoryItems();
+  const featuredPool = syncedItems.filter((item) => item.featured && item.publicVisible);
+  const featured = (featuredPool.length ? featuredPool : syncedItems.filter((item) => item.publicVisible)).slice(0, 3);
 
   return (
     <>
@@ -110,6 +129,7 @@ export function HomePage() {
 }
 
 export function BrowseDressesPage() {
+  const syncedItems = usePublicInventoryItems();
   const [params] = useSearchParams();
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState(params.get("category") || "All");
@@ -117,10 +137,13 @@ export function BrowseDressesPage() {
   const [ageGroup, setAgeGroup] = useState("All");
   const [colour, setColour] = useState("All");
   const [date, setDate] = useState("");
+  const sizes = useMemo(() => ["All", ...Array.from(new Set(syncedItems.map((item) => item.size)))], [syncedItems]);
+  const ageGroups = useMemo(() => ["All", ...Array.from(new Set(syncedItems.map((item) => item.ageGroup)))], [syncedItems]);
+  const colours = useMemo(() => ["All", ...Array.from(new Set(syncedItems.map((item) => item.colour)))], [syncedItems]);
 
   const filtered = useMemo(() => {
     const searchValue = search.trim().toLowerCase();
-    return inventoryItems
+    return syncedItems
       .filter((item) => item.publicVisible && !item.archived)
       .filter((item) => category === "All" || item.category === category)
       .filter((item) => size === "All" || item.size === size)
@@ -136,7 +159,7 @@ export function BrowseDressesPage() {
           .filter(Boolean)
           .some((value) => value!.toLowerCase().includes(searchValue));
       });
-  }, [ageGroup, category, colour, date, search, size]);
+  }, [ageGroup, category, colour, date, search, size, syncedItems]);
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
@@ -178,12 +201,14 @@ export function BrowseDressesPage() {
 }
 
 export function CategoriesPage() {
+  const syncedItems = usePublicInventoryItems();
+
   return (
     <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
       <SectionHeader eyebrow="Dress categories" title="Choose by occasion" />
       <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {categories.map((category) => {
-          const count = inventoryItems.filter((item) => item.category === category.name && item.publicVisible).length;
+          const count = syncedItems.filter((item) => item.category === category.name && item.publicVisible).length;
           return (
             <Link key={category.id} to={`/browse?category=${encodeURIComponent(category.name)}`} className="rounded-lg border border-forest/10 bg-white p-6 shadow-soft transition hover:-translate-y-1">
               <p className="text-sm font-bold uppercase tracking-[0.18em] text-gold">{category.code}</p>
@@ -199,12 +224,13 @@ export function CategoriesPage() {
 }
 
 export function DressDetailsPage() {
+  const syncedItems = usePublicInventoryItems();
   const { id } = useParams();
-  const item = inventoryItems.find((entry) => entry.id === id) || inventoryItems[0];
+  const item = syncedItems.find((entry) => entry.id === id) || syncedItems[0] || inventoryItems[0];
   const [pickup, setPickup] = useState("2026-07-25T10:00");
   const [returnAt, setReturnAt] = useState("2026-07-27T18:00");
   const availability = publicAvailability(item, bookings, pickup, returnAt, settings.preparationBufferHours);
-  const suggestions = similarAvailableItems(item, inventoryItems, bookings, pickup, returnAt);
+  const suggestions = similarAvailableItems(item, syncedItems, bookings, pickup, returnAt);
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
@@ -294,8 +320,9 @@ export function DressDetailsPage() {
 }
 
 export function BookingRequestPage() {
+  const syncedItems = usePublicInventoryItems();
   const [params] = useSearchParams();
-  const initialItem = inventoryItems.find((item) => item.id === params.get("item")) || inventoryItems[0];
+  const initialItem = syncedItems.find((item) => item.id === params.get("item")) || syncedItems[0] || inventoryItems[0];
   const [name, setName] = useState("");
   const [mobile, setMobile] = useState("");
   const [pickup, setPickup] = useState("2026-07-25T10:00");

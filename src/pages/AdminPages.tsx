@@ -40,6 +40,7 @@ import {
   addPaymentTransaction,
   addRefundRecord,
   addRepairRecord,
+  listInventoryItems,
   saveInventoryItem,
   saveShopSettings,
   updateBookingDepositSettlement,
@@ -116,17 +117,38 @@ function todayDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function useSyncedInventoryItems() {
+  const [rows, setRows] = useState(inventoryItems);
+
+  useEffect(() => {
+    let active = true;
+    listInventoryItems(inventoryItems)
+      .then((items) => {
+        if (active && items.length) setRows(items);
+      })
+      .catch((error: unknown) => {
+        console.warn("Inventory sync failed", error);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return rows;
+}
+
 export function DashboardPage() {
+  const syncedItems = useSyncedInventoryItems();
   const collections = collectionSummary(payments);
   const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
   const monthRevenue = payments.filter((payment) => payment.verificationStatus === "Verified").reduce((sum, payment) => sum + payment.amount, 0);
-  const statusCount = (status: DressStatus) => inventoryItems.filter((item) => item.currentStatus === status).length;
+  const statusCount = (status: DressStatus) => syncedItems.filter((item) => item.currentStatus === status).length;
   const expectedReturns = bookings.filter((booking) => booking.expectedReturnDateTime.startsWith(today));
   const overdue = bookings.filter((booking) => booking.bookingStatus === "Overdue" || new Date(booking.expectedReturnDateTime) < new Date(`${today}T23:59:00`));
 
   const categoryRows = categories.map((category) => ({
     label: category.name,
-    value: inventoryItems.filter((item) => item.category === category.name).length
+    value: syncedItems.filter((item) => item.category === category.name).length
   }));
 
   return (
@@ -137,7 +159,7 @@ export function DashboardPage() {
         description="Inventory status, bookings, cash/UPI collections, deposits, maintenance alerts, and quick staff actions."
       />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard title="Inventory items" value={inventoryItems.length} helper="Physical records, not stock quantity" icon={Package} />
+        <MetricCard title="Inventory items" value={syncedItems.length} helper="Physical records, not stock quantity" icon={Package} />
         <MetricCard title="Available dresses" value={statusCount("Available")} helper="Ready to reserve" icon={CheckCircle2} tone="forest" />
         <MetricCard title="Rented or reserved" value={statusCount("Rented") + statusCount("Reserved")} helper="Active commitments" icon={ShoppingBag} tone="purple" />
         <MetricCard title="Overdue rentals" value={overdue.length} helper="Needs follow-up" icon={AlertTriangle} tone="red" />
@@ -246,6 +268,20 @@ export function InventoryPage() {
       .toLowerCase()
       .includes(search.toLowerCase())
   );
+
+  useEffect(() => {
+    let active = true;
+    listInventoryItems(inventoryItems)
+      .then((rows) => {
+        if (active && rows.length) setItems(rows);
+      })
+      .catch((error: unknown) => {
+        console.warn("Inventory sync failed", error);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!qrItem) {
@@ -2170,6 +2206,7 @@ export function DepositsPage() {
 }
 
 export function MaintenancePage() {
+  const syncedItems = useSyncedInventoryItems();
   const [cleaningRows, setCleaningRows] = useState(cleaningRecords);
   const [repairRows, setRepairRows] = useState(repairRecords);
   const [itemStatuses, setItemStatuses] = useState<Record<string, DressStatus>>({});
@@ -2188,7 +2225,7 @@ export function MaintenancePage() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const selectedItem = inventoryItems.find((item) => item.id === selectedItemId) || inventoryItems[0];
+  const selectedItem = syncedItems.find((item) => item.id === selectedItemId) || syncedItems[0] || inventoryItems[0];
   const amount = Math.max(Number(cost) || 0, 0);
 
   async function saveMaintenanceRecord() {
@@ -2251,7 +2288,7 @@ export function MaintenancePage() {
         await updateCleaningRecordStatus(record.id, status);
       }
       setCleaningRows((rows) => rows.map((entry) => entry.id === record.id ? { ...entry, status, actualCompletionDate: status === "Completed" ? todayDate() : entry.actualCompletionDate } : entry));
-      const item = inventoryItems.find((entry) => entry.dressId === record.dressId);
+      const item = syncedItems.find((entry) => entry.dressId === record.dressId);
       if (item && status === "Completed") setItemStatuses((statuses) => ({ ...statuses, [item.id]: "Available" }));
       setMessage(`${record.dressId} cleaning marked ${status}.`);
       setError("");
@@ -2266,7 +2303,7 @@ export function MaintenancePage() {
         await updateRepairRecordStatus(record.id, status, record.actualCost || record.estimatedCost);
       }
       setRepairRows((rows) => rows.map((entry) => entry.id === record.id ? { ...entry, status, actualCost: entry.actualCost || entry.estimatedCost, actualCompletionDate: status === "Completed" ? todayDate() : entry.actualCompletionDate } : entry));
-      const item = inventoryItems.find((entry) => entry.dressId === record.dressId);
+      const item = syncedItems.find((entry) => entry.dressId === record.dressId);
       if (item && status === "Completed") setItemStatuses((statuses) => ({ ...statuses, [item.id]: "Available" }));
       setMessage(`${record.dressId} repair marked ${status}.`);
       setError("");
@@ -2282,7 +2319,7 @@ export function MaintenancePage() {
         <Panel title="Add maintenance record">
           <div className="grid gap-4">
             <SelectField label="Type" value={mode} onChange={(value) => setMode(value as "Cleaning" | "Repair")} options={["Cleaning", "Repair"]} />
-            <SelectField label="Dress" value={selectedItem?.id || ""} onChange={setSelectedItemId} options={inventoryItems.map((item) => item.id)} />
+            <SelectField label="Dress" value={selectedItem?.id || ""} onChange={setSelectedItemId} options={syncedItems.map((item) => item.id)} />
             {selectedItem && (
               <div className="rounded-md bg-cream p-3 text-sm font-semibold text-charcoal/75">
                 <p>{selectedItem.dressId} - {selectedItem.name}</p>
@@ -2317,7 +2354,7 @@ export function MaintenancePage() {
         <ResponsiveTable
           title="Current item statuses"
           headers={["Dress", "Name", "Location", "Status"]}
-          rows={inventoryItems.map((item) => [item.dressId, item.name, item.storageLocation, <StatusBadge key={item.id} status={itemStatuses[item.id] || item.currentStatus} />])}
+          rows={syncedItems.map((item) => [item.dressId, item.name, item.storageLocation, <StatusBadge key={item.id} status={itemStatuses[item.id] || item.currentStatus} />])}
         />
       </div>
       <div className="grid gap-6 xl:grid-cols-2">
@@ -2483,6 +2520,7 @@ export function ExpensesPage() {
 }
 
 export function ReportsPage() {
+  const syncedItems = useSyncedInventoryItems();
   const [reportType, setReportType] = useState("Payments");
   const [method, setMethod] = useState("All");
   const [from, setFrom] = useState("2026-07-01");
@@ -2496,7 +2534,7 @@ export function ReportsPage() {
   const paymentRows = payments.filter((payment) => inRange(payment.transactionDateTime) && (method === "All" || payment.paymentMethod === method));
   const bookingRows = bookings.filter((booking) => inRange(booking.bookingDate));
   const expenseRows = expenses.filter((expense) => inRange(expense.date));
-  const inventoryRows = inventoryItems;
+  const inventoryRows = syncedItems;
   const depositRows = bookings.filter((booking) => inRange(booking.bookingDate));
   const verifiedCollections = collectionSummary(paymentRows);
   const pendingBalances = bookingRows.reduce((sum, booking) => sum + bookingTotals(booking).balanceDue, 0);

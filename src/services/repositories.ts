@@ -46,6 +46,24 @@ export async function listCollection<T>(collectionName: string, fallback: T[]) {
   return snap.docs.map((entry: FirestoreEntry) => ({ id: entry.id, ...entry.data() })) as T[];
 }
 
+export async function listInventoryItems(fallback: InventoryItem[]) {
+  return listCollection<InventoryItem>("inventoryItems", fallback);
+}
+
+export async function listPublicInventoryItems(fallback: InventoryItem[]) {
+  if (!db) return fallback;
+  const snap = await getDocs(
+    query(
+      collection(db, "inventoryItems"),
+      where("publicVisible", "==", true),
+      where("archived", "==", false),
+      limit(200)
+    )
+  );
+  const rows = snap.docs.map((entry: FirestoreEntry) => ({ id: entry.id, ...entry.data() })) as InventoryItem[];
+  return rows.length ? rows : fallback;
+}
+
 export async function saveBookingRequest(payload: Omit<Booking, "id" | "createdAt" | "updatedAt">) {
   if (!db) throw new Error("Firebase is not configured. Copy .env.example to .env.local and add your project values.");
   const ref = await addDoc(collection(db, "bookings"), {

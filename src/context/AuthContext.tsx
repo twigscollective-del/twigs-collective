@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import {
+  getIdToken,
   onAuthStateChanged,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
@@ -30,8 +31,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     return onAuthStateChanged(auth, (nextUser) => {
-      setUser(nextUser);
-      setLoading(false);
+      if (!nextUser) {
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+
+      getIdToken(nextUser, true)
+        .catch((error: unknown) => {
+          console.warn("Firebase token refresh failed", error);
+        })
+        .finally(() => {
+          setUser(nextUser);
+          setLoading(false);
+        });
     });
   }, []);
 
@@ -42,7 +55,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       configured: firebaseConfigured,
       async login(email: string, password: string) {
         if (!auth) throw new Error("Firebase is not configured. Add Firebase values to .env.local and restart the dev server.");
-        await signInWithEmailAndPassword(auth, email, password);
+        const credential = await signInWithEmailAndPassword(auth, email, password);
+        await getIdToken(credential.user, true);
       },
       async logout() {
         if (!auth) return;

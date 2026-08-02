@@ -16,6 +16,7 @@ declare module "firebase/auth" {
   export function getAuth(app: FirebaseApp): Auth;
   export function setPersistence(auth: Auth, persistence: unknown): Promise<void>;
   export function onAuthStateChanged(auth: Auth, callback: (user: User | null) => void): () => void;
+  export function getIdToken(user: User, forceRefresh?: boolean): Promise<string>;
   export function signInWithEmailAndPassword(auth: Auth, email: string, password: string): Promise<{ user: User }>;
   export function sendPasswordResetEmail(auth: Auth, email: string): Promise<void>;
   export function signOut(auth: Auth): Promise<void>;
