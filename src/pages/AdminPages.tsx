@@ -254,6 +254,10 @@ export function InventoryPage() {
   const [shortVideoPreview, setShortVideoPreview] = useState("");
   const [existingImages, setExistingImages] = useState<string[]>([]);
   const [existingShortVideo, setExistingShortVideo] = useState("");
+  const [imageUrl1, setImageUrl1] = useState("");
+  const [imageUrl2, setImageUrl2] = useState("");
+  const [imageUrl3, setImageUrl3] = useState("");
+  const [shortVideoUrlInput, setShortVideoUrlInput] = useState("");
   const [inventoryMessage, setInventoryMessage] = useState("");
   const [inventoryError, setInventoryError] = useState("");
   const [savingInventory, setSavingInventory] = useState(false);
@@ -310,23 +314,40 @@ export function InventoryPage() {
     const code = categories.find((entry) => entry.name === category)?.code || "GEN";
     const now = Date.now();
     const mediaOwnerId = editingId || `inv-local-${now}`;
+    const pastedImageUrls = [imageUrl1, imageUrl2, imageUrl3].map((url) => url.trim()).filter(Boolean);
+    const pastedShortVideoUrl = shortVideoUrlInput.trim();
 
     setSavingInventory(true);
     try {
-      const uploadedImages = imageFiles.length && firebaseConfigured
-        ? await uploadInventoryMedia(mediaOwnerId, imageFiles, "dressImages")
-        : [];
-      const uploadedVideos = shortVideoFile && firebaseConfigured
-        ? await uploadInventoryMedia(mediaOwnerId, [shortVideoFile], "dressVideos")
-        : [];
-      const nextImages = uploadedImages.length ? uploadedImages : existingImages;
-      const nextFeaturedImage = nextImages[0] || items[0].featuredImage;
-      const nextShortVideo = uploadedVideos[0] || existingShortVideo || undefined;
+      let mediaWarning = "";
+      let uploadedImages: string[] = [];
+      let uploadedVideos: string[] = [];
 
       if ((imageFiles.length || shortVideoFile) && !firebaseConfigured) {
-        setInventoryError("Firebase is not configured, so uploaded media was not saved. Add Firebase values and try again.");
-        return;
+        mediaWarning = "Firebase is not configured, so media was not uploaded. Item details were saved without new media.";
       }
+
+      if (imageFiles.length && firebaseConfigured) {
+        try {
+          uploadedImages = await uploadInventoryMedia(mediaOwnerId, imageFiles, "dressImages");
+        } catch (error) {
+          mediaWarning = error instanceof Error ? `Image upload failed: ${error.message}` : "Image upload failed.";
+        }
+      }
+
+      if (shortVideoFile && firebaseConfigured) {
+        try {
+          uploadedVideos = await uploadInventoryMedia(mediaOwnerId, [shortVideoFile], "dressVideos");
+        } catch (error) {
+          const videoError = error instanceof Error ? error.message : "Video upload failed.";
+          mediaWarning = [mediaWarning, `Video upload failed: ${videoError}`].filter(Boolean).join(" ");
+        }
+      }
+
+      const nextImages = pastedImageUrls.length ? pastedImageUrls : uploadedImages.length ? uploadedImages : existingImages;
+      const nextFeaturedImage = nextImages[0] || items[0].featuredImage;
+      const nextShortVideo = pastedShortVideoUrl || uploadedVideos[0] || existingShortVideo || undefined;
+      const mediaHelp = mediaWarning ? " Enable Firebase Storage in the Firebase Console, then deploy storage rules." : "";
 
       if (editingId) {
         const updatedItems = items.map((item) =>
@@ -358,7 +379,7 @@ export function InventoryPage() {
         const updatedItem = updatedItems.find((item) => item.id === editingId);
         if (updatedItem && firebaseConfigured) await saveInventoryItem(updatedItem);
         setItems(updatedItems);
-        setInventoryMessage("Inventory item updated. Media files are stored in Firebase Storage; Firestore stores only URLs.");
+        setInventoryMessage(mediaWarning ? `Inventory item updated without new media. ${mediaWarning}${mediaHelp}` : "Inventory item updated. Media files are stored in Firebase Storage; Firestore stores only URLs.");
         resetInventoryForm();
         return;
       }
@@ -394,7 +415,7 @@ export function InventoryPage() {
         await Promise.all(nextItems.map((item) => saveInventoryItem(item)));
       }
       setItems([...nextItems, ...items]);
-      setInventoryMessage(`Saved ${nextItems.length} item${nextItems.length === 1 ? "" : "s"}. Media files are in Firebase Storage; Firestore documents stay small.`);
+      setInventoryMessage(mediaWarning ? `Saved ${nextItems.length} item${nextItems.length === 1 ? "" : "s"} without new media. ${mediaWarning}${mediaHelp}` : `Saved ${nextItems.length} item${nextItems.length === 1 ? "" : "s"}. Media files are in Firebase Storage; Firestore documents stay small.`);
       resetInventoryForm();
     } catch (error) {
       setInventoryError(error instanceof Error ? error.message : "Could not save this inventory item.");
@@ -413,6 +434,10 @@ export function InventoryPage() {
     setShortVideoPreview("");
     setExistingImages([]);
     setExistingShortVideo("");
+    setImageUrl1("");
+    setImageUrl2("");
+    setImageUrl3("");
+    setShortVideoUrlInput("");
     setShoulder("");
     setBust("");
     setWaist("");
@@ -511,6 +536,10 @@ export function InventoryPage() {
     setShortVideoPreview(item.shortVideo || "");
     setExistingImages(item.images);
     setExistingShortVideo(item.shortVideo || "");
+    setImageUrl1(item.images[0] || "");
+    setImageUrl2(item.images[1] || "");
+    setImageUrl3(item.images[2] || "");
+    setShortVideoUrlInput(item.shortVideo || "");
     setInventoryMessage("");
     setInventoryError("");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -721,6 +750,16 @@ export function InventoryPage() {
               </p>
             )}
             <TextAreaField label="Remarks" value={remarks} onChange={setRemarks} placeholder="Condition notes, fitting notes, accessories, or special handling." />
+            <div className="grid gap-4 rounded-md border border-forest/10 bg-white p-3">
+              <p className="text-sm font-bold text-forest">Media URLs</p>
+              <p className="text-xs font-semibold text-charcoal/55">
+                Paste public image/video links here to save media without Firebase Storage.
+              </p>
+              <TextField label="Image URL 1" value={imageUrl1} onChange={setImageUrl1} placeholder="https://..." />
+              <TextField label="Image URL 2" value={imageUrl2} onChange={setImageUrl2} placeholder="https://..." />
+              <TextField label="Image URL 3" value={imageUrl3} onChange={setImageUrl3} placeholder="https://..." />
+              <TextField label="Short video URL" value={shortVideoUrlInput} onChange={setShortVideoUrlInput} placeholder="https://..." />
+            </div>
             <div className="grid gap-4 rounded-md border border-forest/10 bg-cream p-3 sm:grid-cols-2">
               <SelectField
                 label="Image crop"
@@ -775,12 +814,12 @@ export function InventoryPage() {
                 onChange={(event) => selectShortVideo(event.target.files?.[0] || null)}
               />
             </label>
-            {shortVideoPreview && (
+            {(shortVideoPreview || shortVideoUrlInput.trim()) && (
               <div className="rounded-md border border-forest/10 bg-cream p-3">
                 <p className="mb-2 text-xs font-bold uppercase tracking-[0.12em] text-charcoal/45">
                   Short video preview
                 </p>
-                <video className="aspect-video w-full rounded-md bg-black object-contain" src={shortVideoPreview} controls />
+                <video className="aspect-video w-full rounded-md bg-black object-contain" src={shortVideoPreview || shortVideoUrlInput.trim()} controls />
               </div>
             )}
             {inventoryMessage && <p className="rounded-md bg-emerald-50 p-3 text-sm font-semibold text-emerald-900">{inventoryMessage}</p>}
